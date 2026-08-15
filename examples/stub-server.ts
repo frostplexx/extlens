@@ -120,7 +120,20 @@ function makeBackend(): Backend {
   };
 }
 
-const port = Number(process.argv[2] ?? process.env.EXLENS_PORT ?? 8081);
+function parsePort(): number {
+  const flagIndex = process.argv.indexOf("--port");
+  if (flagIndex !== -1 && process.argv[flagIndex + 1]) {
+    const p = Number(process.argv[flagIndex + 1]);
+    if (Number.isInteger(p) && p >= 0 && p < 65536) return p;
+  }
+  const positional = Number(process.argv[2]);
+  if (Number.isInteger(positional) && positional >= 0 && positional < 65536) return positional;
+  const fromEnv = Number(process.env.EXLENS_PORT);
+  if (Number.isInteger(fromEnv) && fromEnv >= 0 && fromEnv < 65536) return fromEnv;
+  return 8081;
+}
+
+const port = parsePort();
 const server = createExtlensServer({ port, backend: makeBackend() });
 console.log(`extlens stub server on ws://localhost:${server.port}`);
 console.log("press Ctrl+C to stop");
