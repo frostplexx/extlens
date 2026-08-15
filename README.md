@@ -36,13 +36,13 @@ Or run the real AgenticMigrator adapter (see ADAPTERS.md):
 
 ```sh
 cd ~/Projects/AgenticMigrator
-# server-only mode: serves ./run without migrating
-npx tsx src/cli.ts --out ./run --port 8081
-# or after a migration, the server runs on by default (Ctrl+C to stop)
-npx tsx src/cli.ts <extension-dir> --port 8081
-# or include unmigrated extensions from a corpus directory
+# serve runs + pending sources; migrations start only via host.start
 npx tsx src/cli.ts --out ./run --source-dir ./corpus --port 8081
+# one-shot migration (no server): what host.start runs as a child
+npx tsx src/cli.ts <extension-dir> --no-server
 ```
+
+(`npm run cli -- ...` also works — npm needs the `--` before flags.)
 
 Connect the client:
 

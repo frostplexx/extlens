@@ -124,39 +124,42 @@ Use `--out run/<name>` to accumulate multiple runs in one root.
 Two entry points:
 
 ```sh
-# serve the run you just produced (server starts before the migration and
-# keeps serving the completed run until Ctrl+C)
-migrate <extension-dir> --port 8081
+# serve runs + pending sources; migrations start only via host.start
+migrate [--source-dir <corpus|ext-dir>] --port 8081
 
-# serve a populated run directory without re-running a migration
-migrate --out ./run --port 8081
-# or the standalone entry (same thing)
+# one-shot migration (no server): what host.start runs as a child process
+migrate <extension-dir> --no-server
+# or the standalone entry (same thing as the first command)
 EXLENS_RUN_DIR=./run tsx src/extlens/index.ts --port 8081
-
-# serve runs plus every unmigrated extension from a corpus directory
-migrate --out ./run --source-dir ./corpus --port 8081
 ```
 
+The server never auto-migrates. The client triggers a migration through the
+protocol's `host.start {id}`; the controller (`src/extlens/migrator.ts`)
+spawns a one-shot child (`cli.ts <source> --out run/<id> --no-server`) and
+reports phases derived from the run dir (`preparing` → `migrating` →
+`verifying` → `done`/`failed`, `stopped` after `host.stop`).
+
 Environment: `EXLENS_PORT` (default 8081), `EXLENS_RUN_DIR` (default `./run`),
-`EXLENS_SOURCE_DIR`. The server is on by default; `--no-server` disables it
-for one-shot runs.
+`EXLENS_SOURCE_DIR`. The server is on by default; `--no-server` with an
+extension dir is the one-shot migration mode.
 
 ### Unmigrated extensions
 
-Every subdirectory of `--source-dir` (or `EXLENS_SOURCE_DIR`) that contains a
-`manifest.json` is listed as an unmigrated extension unless its resolved path
-is recorded as a run's `source-path.txt`. An unmigrated source has an MV2
-profile, `hasMv3: false`, and `files.mv2` only; it is read-only
+`--source-dir` (or `EXLENS_SOURCE_DIR`) accepts a corpus — a directory of
+extension subdirectories — or a single extension directory. A positional
+`<extension-dir>` registers as an extra pending source (id = its directory
+name). Every listed source that no run's `source-path.txt` points at is
+unmigrated: MV2 profile, `hasMv3: false`, `files.mv2` only, read-only
 (`reports.submit` rejects it). A migrated source is represented by its run row
 instead, so the corpus does not double-list completed work.
 
 ### Host changes beyond src/extlens/
 
-`src/cli.ts` records the source extension path (`source-path.txt`) after
-clearing the run dir, then starts the server (default port 8081) before the
-migration so the client can watch the run dir fill in. The server stays alive
-after the migration until Ctrl+C. With no extension dir argument, the CLI
-serves the existing run dir without migrating (server-only mode).
+`src/cli.ts` starts the server (default port 8081) and then waits: with a
+positional extension dir it logs the pending source id and blocks; without one
+it serves existing runs. Nothing migrates until `host.start`. `--no-server`
+runs the migration pipeline inline (convert → static analysis → docker) and
+exits — that is the child the controller spawns per `host.start`.
 
 ## Not implemented: ExtPorter adapter
 
