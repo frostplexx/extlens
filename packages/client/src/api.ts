@@ -65,11 +65,22 @@ export class ExtlensClient {
     this.ws = ws;
     ws.onmessage = (event) => this.handleMessage(String(event.data));
 
-    await new Promise<void>((resolve, reject) => {
-      ws.onopen = () => resolve();
-      ws.onerror = () => reject(new Error("socket error"));
-      ws.onclose = () => reject(new Error("connection closed"));
-    });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        ws.onopen = () => resolve();
+        ws.onerror = () => reject(new Error("socket error"));
+        ws.onclose = () => reject(new Error("connection closed"));
+      });
+    } catch (error) {
+      // Connection refused or dropped before open. Retry with backoff.
+      this.ws = null;
+      if (this.stopped) return;
+      const message = error instanceof Error ? error.message : String(error);
+      this.onStatus("disconnected", message);
+      this.failAllPending(new Error("connection lost"));
+      this.scheduleRetry();
+      return;
+    }
 
     if (this.stopped) return;
     this.attempt = 0;
@@ -80,14 +91,18 @@ export class ExtlensClient {
     };
   }
 
-  private handleDisconnect(): void {
-    this.ws = null;
-    this.onStatus("disconnected", "connection lost");
-    this.failAllPending(new Error("connection lost"));
+  private scheduleRetry(): void {
     if (this.stopped) return;
     const delay = Math.min(1000 * 2 ** this.attempt, 8000);
     this.attempt += 1;
     this.retryTimer = setTimeout(() => void this.connectOnce(), delay);
+  }
+
+  private handleDisconnect(): void {
+    this.ws = null;
+    this.onStatus("disconnected", "connection lost");
+    this.failAllPending(new Error("connection lost"));
+    this.scheduleRetry();
   }
 
   private handleMessage(raw: string): void {
