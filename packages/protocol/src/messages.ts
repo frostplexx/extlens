@@ -179,7 +179,7 @@ export const ExtensionProfileSchema = z.object({
 // ---------------------------------------------------------------------------
 
 export const FileRefsSchema = z.object({
-  mv2: z.string().min(1),
+  mv2: z.string().min(1).optional(),
   mv3: z.string().optional(),
 });
 

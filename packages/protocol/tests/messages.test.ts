@@ -183,8 +183,12 @@ describe("extensions.files result", () => {
     expect(FileRefsSchema.parse(files)).toEqual(files);
   });
 
-  test("rejects refs without mv2", () => {
-    expect(() => FileRefsSchema.parse({ mv3: "file:///x" })).toThrow();
+  test("accepts refs without mv2 (host has no MV2 source)", () => {
+    expect(FileRefsSchema.parse({ mv3: "file:///x" })).toEqual({ mv3: "file:///x" });
+  });
+
+  test("rejects an empty mv2 ref", () => {
+    expect(() => FileRefsSchema.parse({ mv2: "" })).toThrow();
   });
 });
 

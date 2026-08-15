@@ -112,8 +112,8 @@ extlens/
       src/browsers/manager.ts        — playwright dual-browser launch (MV2 old Chrome, MV3 latest)
       src/browsers/load-status.ts    — CDP extension load detection (port of v0 behavior)
   examples/
-    extporter-adapter.ts — reference adapter: Backend over ExtPorter's Mongo data model
-    agentic-adapter.ts   — reference adapter: Backend over AgenticMigrator run outputs
+    stub-server.ts — reference adapter: Backend over ExtPorter's Mongo data model
+    stub-server.ts           — runnable reference host: Backend over the fixtures
   phase2/                — designed now, not implemented (see Non-goals)
     schema.sql           — SQLite DDL for the folder mode (extensions, reports tables)
 ```
@@ -144,8 +144,9 @@ Methods:
   `interestingness_desc | interestingness_asc | name`. Result `{extensions: ExtensionLight[],
   stats: {total, analyzed, with_mv3, avg_score}, page, pageSize, totalPages}`
 - `extensions.get` — params `{id}`. Result `{extension: ExtensionProfile}`
-- `extensions.files` — params `{id}`. Result `{files: {mv2: string, mv3?: string}}`. File
+- `extensions.files` — params `{id}`. Result `{files: {mv2?: string, mv3?: string}}`. File
   references are transport-agnostic strings. v1 hosts return `file://` absolute paths.
+  `mv2` is optional: a host without an MV2 source omits it.
   PROTOCOL.md documents `http(s)://` as the remote-host form
 - `reports.get` — params `{extensionId}`. Result `{report: Report | null}`
 - `reports.submit` — params `{report}`. Result `{id}`
@@ -216,18 +217,22 @@ Step 4 — Host SDK (the `extlens-sdk` package)
   built package, start a server, call ping, and shut down.
 
 Step 5 — ExtPorter adapter
-- Add `extlens-sdk` as a dependency to the ExtPorter repo. Add `migrator/features/extlens/`
-  with a Backend over its Mongo Extension/Report collections (its data model matches the
-  profile shape closely).
-- Start the extlens server alongside the ExtPorter app (port from env, default 8081).
-- Test against live ExtPorter data (its extensions/ corpus is already analyzed).
+- NOT IMPLEMENTED by decision: the ExtPorter repo stays untouched. The intended shape is
+  documented in ADAPTERS.md (a Backend over its Mongo Extension/Report collections, its
+  stored score/breakdown/tags/listeners as profile overrides).
 
-Step 6 — AgenticMigrator adapter
+Step 6 — AgenticMigrator adapter (DONE)
 - Add `extlens-sdk` as a dependency to the AgenticMigrator repo. Add `src/extlens/` with a
-  Backend over the run/ directory: extension dirs, analysis.json, report.json per run.
-- Serve extension files via file:// references; compute the profile with the SDK default
-  flow (runs the analyzer on the on-disk extension).
-- Start the server via a new CLI flag; test against a populated run/ directory.
+  Backend over the run/ directory: the migrated output (out/), report.json, and the
+  recorded source path per run.
+- Serve extension files via file references; compute the profile with the SDK default
+  flow (runs the analyzer on the on-disk output).
+- Start the server via a CLI flag (`--extlens-port`, `EXLENS_PORT`, `EXLENS_RUN_DIR`) or a
+  standalone entry (`tsx src/extlens/index.ts --port N --run <dir>`).
+- `src/cli.ts` records `source-path.txt` (the MV2 source) and can stay alive serving the
+  completed run.
+- Verified: typechecked against the SDK, scripted end-to-end over a real WebSocket against
+  a synthetic run/ directory, standalone entry pinged and shut down cleanly.
 
 Step 7 — Client explorer tab
 - Connection lifecycle: connect, reconnect with backoff, status bar.
@@ -245,10 +250,11 @@ Step 8 — Client analyzer tab
 - Handle MV3-missing extensions (MV2-only review).
 - Verify manually against both hosts.
 
-Step 9 — Docs and polish
+Step 9 — Docs and polish (DONE)
 - README: quickstart (start a host adapter, connect the client), keybindings, env vars
-  (EXTLENS_WS, DB path for phase 2).
-- ADAPTERS.md: how to embed the SDK, Backend interface reference, example adapter walkthrough.
+  (EXTLENS_WS, CHROME_OLD/CHROME_LATEST, EXLENS_PORT/EXLENS_RUN_DIR).
+- ADAPTERS.md: how to embed the SDK, Backend interface reference, AgenticMigrator
+  walkthrough, ExtPorter status, distribution path.
 - Error surfacing polish: server errors rendered in the client status bar.
 
 Phase 2 (designed now, not implemented)
@@ -265,9 +271,8 @@ Phase 2 (designed now, not implemented)
 - Protocol: zod round-trip and rejection tests.
 - Host SDK: integration tests against a stub in-memory backend over a real WebSocket; every
   protocol method exercised; error cases (unknown id, invalid params).
-- ExtPorter adapter: manual + scripted checks against live ExtPorter data (list, get, files,
-  report round trip).
-- AgenticMigrator adapter: same, against a populated run/ directory.
+- AgenticMigrator adapter: scripted end-to-end over a synthetic run/ directory (list, get,
+  files, report round trip, 404); verified against a real WebSocket server.
 - Client: manual interactive verification (explorer navigation, browser launch, form submit,
   report persistence check via `reports.get`). No automated TUI tests in v1.
 - SDK consumers: ESM and CJS smoke tests against the built package (step 4).

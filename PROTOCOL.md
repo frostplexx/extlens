@@ -201,6 +201,8 @@ File references are transport-agnostic strings.
   as the client. The client opens the browser against these paths.
 - A host without an MV3 variant omits `mv3`. The client then offers an MV2-only
   review.
+- A host without an MV2 source omits `mv2`. The client then offers an MV3-only
+  review.
 - The protocol documents `http(s)://` as the remote-host form (future file
   plane). A `file://` path may point at a manifest.json or at a directory; the
   client resolves both.
