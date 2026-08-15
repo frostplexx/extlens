@@ -22,16 +22,15 @@
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "bun run build && bun test"
+    "test": "npm run build && vitest run"
   },
   "dependencies": {
-    "@extlens/analyzer": "workspace:*",
-    "@extlens/protocol": "workspace:*",
+    "@extlens/analyzer": "*",
+    "@extlens/protocol": "*",
     "ws": "^8.18.3",
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@types/bun": "latest",
     "@types/node": "^22.10.0",
     "@types/ws": "^8.5.13",
     "tsup": "^8.3.0",

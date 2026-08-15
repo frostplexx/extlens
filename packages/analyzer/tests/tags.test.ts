@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { analyzeExtension } from "../src/index.js";
 import { loadFixture } from "./helpers.js";
 

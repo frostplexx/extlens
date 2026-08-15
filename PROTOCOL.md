@@ -207,7 +207,7 @@ File references are transport-agnostic strings.
 
 ### reports.get
 
-Params: `{"extensionId": "abc123"}`. Unknown id fails with code `404`.
+Params: `{"extensionId": "abc123"}`.
 
 Result:
 
@@ -215,7 +215,9 @@ Result:
 { "report": Report | null }
 ```
 
-`null` means no report exists yet for this extension.
+`null` means no report exists yet for this extension. The server does not fail
+on unknown extension ids here; the client only calls this with extensions it
+has listed.
 
 ### reports.submit
 

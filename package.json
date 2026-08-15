@@ -5,10 +5,18 @@
   "workspaces": [
     "packages/*"
   ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "test": "bun test",
-    "typecheck": "bun run --filter '*' typecheck",
-    "build": "bun run --cwd packages/host-sdk build",
-    "client": "bun run --cwd packages/client dev"
+    "test": "vitest run",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "build": "npm run build --workspace packages/host-sdk",
+    "client": "npm run dev --workspace packages/client"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.5"
   }
 }

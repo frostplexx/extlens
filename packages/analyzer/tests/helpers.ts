@@ -4,7 +4,7 @@ import type { ExtensionSource, SourceFile } from "../src/index.js";
 
 /** Load a fixture directory (manifest.json + all other files) as ExtensionSource. */
 export function loadFixture(dirName: string): ExtensionSource {
-  const dir = join(import.meta.dir, "..", "..", "..", "fixtures", dirName);
+  const dir = join(import.meta.dirname, "..", "..", "..", "fixtures", dirName);
   const files: SourceFile[] = [];
   const walk = (d: string, prefix: string) => {
     for (const entry of readdirSync(d).sort()) {

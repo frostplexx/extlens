@@ -1,5 +1,5 @@
 {
-  description = "extlens — extension analysis + review toolchain (bun + node)";
+  description = "extlens — extension analysis + review toolchain (node)";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -12,7 +12,7 @@
         pkgs = nixpkgs.legacyPackages.${system};
       in {
         devShells.default = pkgs.mkShell {
-          packages = with pkgs; [ bun nodejs_22 git ];
+          packages = with pkgs; [ nodejs_22 git ];
         };
       });
 }

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { extractListeners } from "../src/listener-extractor.js";
 import { loadFixture } from "./helpers.js";
 

@@ -3,6 +3,7 @@ import type {
   ExtensionLightSchema,
   ExtensionProfileSchema,
   FileRefsSchema,
+  ListParamsSchema,
   ListResultSchema,
   ListStatsSchema,
   ListenerSchema,
@@ -25,6 +26,7 @@ export type Listener = z.infer<typeof ListenerSchema>;
 export type ManifestSummary = z.infer<typeof ManifestSummarySchema>;
 export type FileRefs = z.infer<typeof FileRefsSchema>;
 export type ListStats = z.infer<typeof ListStatsSchema>;
+export type ListParams = z.infer<typeof ListParamsSchema>;
 export type ListResult = z.infer<typeof ListResultSchema>;
 export type ReportDraft = z.infer<typeof ReportDraftSchema>;
 export type Report = z.infer<typeof ReportSchema>;
