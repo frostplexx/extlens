@@ -1,0 +1,14 @@
+{
+  "name": "extlens",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "bun run --filter '*' typecheck",
+    "build": "bun run --cwd packages/host-sdk build",
+    "client": "bun run --cwd packages/client dev"
+  }
+}
