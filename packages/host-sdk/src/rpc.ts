@@ -100,6 +100,31 @@ export async function dispatch(backend: Backend, request: RpcRequest): Promise<R
         result = { id };
         break;
       }
+      case "host.status": {
+        const host = backend.host;
+        if (!host) {
+          throw new RpcError(ErrorCodes.METHOD_NOT_FOUND, "host lifecycle not supported by this backend");
+        }
+        result = { status: await host.getStatus() };
+        break;
+      }
+      case "host.start": {
+        const host = backend.host;
+        if (!host) {
+          throw new RpcError(ErrorCodes.METHOD_NOT_FOUND, "host lifecycle not supported by this backend");
+        }
+        const { id } = params as { id: string };
+        result = { status: await host.start(id) };
+        break;
+      }
+      case "host.stop": {
+        const host = backend.host;
+        if (!host) {
+          throw new RpcError(ErrorCodes.METHOD_NOT_FOUND, "host lifecycle not supported by this backend");
+        }
+        result = { status: await host.stop() };
+        break;
+      }
     }
 
     validateResult(request.method as MethodName, result);

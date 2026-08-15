@@ -40,6 +40,8 @@ cd ~/Projects/AgenticMigrator
 npx tsx src/cli.ts --out ./run --port 8081
 # or after a migration, the server runs on by default (Ctrl+C to stop)
 npx tsx src/cli.ts <extension-dir> --port 8081
+# or include unmigrated extensions from a corpus directory
+npx tsx src/cli.ts --out ./run --source-dir ./corpus --port 8081
 ```
 
 Connect the client:

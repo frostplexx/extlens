@@ -3,6 +3,7 @@ import type {
   ExtensionLightSchema,
   ExtensionProfileSchema,
   FileRefsSchema,
+  HostStatusSchema,
   ListParamsSchema,
   ListResultSchema,
   ListStatsSchema,
@@ -33,3 +34,4 @@ export type ListResult = z.infer<typeof ListResultSchema>;
 export type ReportDraft = z.infer<typeof ReportDraftSchema>;
 export type Report = z.infer<typeof ReportSchema>;
 export type ListenerTestResult = z.infer<typeof ListenerTestResultSchema>;
+export type HostStatus = z.infer<typeof HostStatusSchema>;

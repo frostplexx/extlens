@@ -5,6 +5,8 @@ import {
   ExtensionLightSchema,
   ExtensionProfileSchema,
   FileRefsSchema,
+  HostStartParamsSchema,
+  HostStatusSchema,
   ListParamsSchema,
   ListResultSchema,
   MethodsSchema,
@@ -251,5 +253,42 @@ describe("ids and methods", () => {
     for (const [name, def] of Object.entries(MethodsSchema)) {
       expect(def.result, `missing result schema for ${name}`).toBeDefined();
     }
+  });
+});
+
+describe("host lifecycle", () => {
+  const status = {
+    state: "running",
+    extensionId: "mv2-b",
+    phase: "migrating",
+    startedAt: "2025-01-01T00:00:00.000Z",
+    message: null,
+  };
+
+  test("round-trips a running status", () => {
+    expect(HostStatusSchema.parse(status)).toEqual(status);
+  });
+
+  test("round-trips an idle status with the last job's terminal phase", () => {
+    const idle = { state: "idle", extensionId: "mv2-b", phase: "failed", startedAt: null, message: "docker exploded" };
+    expect(HostStatusSchema.parse(idle)).toEqual(idle);
+  });
+
+  test("rejects an unknown state", () => {
+    expect(() => HostStatusSchema.parse({ ...status, state: "paused" })).toThrow();
+  });
+
+  test("host.status result wrapper parses", () => {
+    expect(MethodsSchema["host.status"].result.parse({ status })).toEqual({ status });
+  });
+
+  test("host.start params require an id", () => {
+    expect(HostStartParamsSchema.parse({ id: "mv2-b" })).toEqual({ id: "mv2-b" });
+    expect(() => HostStartParamsSchema.parse({})).toThrow();
+    expect(() => HostStartParamsSchema.parse({ id: "" })).toThrow();
+  });
+
+  test("host.stop takes no params", () => {
+    expect(MethodsSchema["host.stop"].params).toBeUndefined();
   });
 });

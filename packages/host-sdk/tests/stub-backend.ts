@@ -3,9 +3,12 @@ import { join } from "node:path";
 import type {
   Backend,
   ExtensionSource,
+  HostStatus,
   Report,
 } from "../src/index.js";
 import { computeProfile } from "../src/profile.js";
+import { RpcError } from "../src/rpc.js";
+import { ErrorCodes } from "../src/index.js";
 
 /** In-memory backend over the synthetic fixtures. */
 export function loadFixture(dirName: string): ExtensionSource {
@@ -101,6 +104,20 @@ export function makeStubBackend(): Backend & { reports: Map<string, Report> } {
       const now = new Date().toISOString();
       reports.set(report.extensionId, { ...report, id, createdAt: now, updatedAt: now });
       return id;
+    },
+
+    // The stub has no migration capability: status reports idle, start/stop
+    // answer -32601 so the client can exercise graceful handling.
+    host: {
+      async getStatus(): Promise<HostStatus> {
+        return { state: "idle", extensionId: null, phase: null, startedAt: null, message: null };
+      },
+      async start(): Promise<HostStatus> {
+        throw new RpcError(ErrorCodes.METHOD_NOT_FOUND, "stub host cannot run migrations");
+      },
+      async stop(): Promise<HostStatus> {
+        return { state: "idle", extensionId: null, phase: null, startedAt: null, message: null };
+      },
     },
   };
 }

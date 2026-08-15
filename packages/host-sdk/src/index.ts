@@ -15,8 +15,9 @@
 import { startServer } from "./ws.js";
 import type { ExtlensServerHandle, ExtlensServerOptions } from "./ws.js";
 
+export { RpcError } from "./rpc.js";
 export { computeProfile, summarizeManifest } from "./profile.js";
-export type { Backend, GetExtensionResult } from "./backend.js";
+export type { Backend, GetExtensionResult, HostController } from "./backend.js";
 
 export * from "@extlens/protocol";
 export type { ExtensionSource, Manifest, SourceFile } from "@extlens/analyzer";

@@ -132,10 +132,23 @@ migrate <extension-dir> --port 8081
 migrate --out ./run --port 8081
 # or the standalone entry (same thing)
 EXLENS_RUN_DIR=./run tsx src/extlens/index.ts --port 8081
+
+# serve runs plus every unmigrated extension from a corpus directory
+migrate --out ./run --source-dir ./corpus --port 8081
 ```
 
-Environment: `EXLENS_PORT` (default 8081), `EXLENS_RUN_DIR` (default `./run`).
-The server is on by default; `--no-server` disables it for one-shot runs.
+Environment: `EXLENS_PORT` (default 8081), `EXLENS_RUN_DIR` (default `./run`),
+`EXLENS_SOURCE_DIR`. The server is on by default; `--no-server` disables it
+for one-shot runs.
+
+### Unmigrated extensions
+
+Every subdirectory of `--source-dir` (or `EXLENS_SOURCE_DIR`) that contains a
+`manifest.json` is listed as an unmigrated extension unless its resolved path
+is recorded as a run's `source-path.txt`. An unmigrated source has an MV2
+profile, `hasMv3: false`, and `files.mv2` only; it is read-only
+(`reports.submit` rejects it). A migrated source is represented by its run row
+instead, so the corpus does not double-list completed work.
 
 ### Host changes beyond src/extlens/
 

@@ -219,6 +219,30 @@ export const ReportSchema = ReportDraftSchema.extend({
 });
 
 // ---------------------------------------------------------------------------
+// host.status / host.start / host.stop
+// ---------------------------------------------------------------------------
+
+/** Host lifecycle state. "running" means a host job (e.g. a migration) is in progress. */
+export const HostStateSchema = z.enum(["idle", "running", "stopping"]);
+
+/**
+ * Host lifecycle status. `phase` is host-specific free text; AgenticMigrator
+ * uses preparing | migrating | verifying | done | failed | stopped. After a
+ * job finishes, `state` returns to "idle" while `phase`/`extensionId` keep the
+ * terminal state of the last job until the next start.
+ */
+export const HostStatusSchema = z.object({
+  state: HostStateSchema,
+  extensionId: z.string().nullable(),
+  phase: z.string().nullable(),
+  startedAt: z.string().nullable(),
+  message: z.string().nullable(),
+});
+
+/** Which extension to start a host job (migration) for. */
+export const HostStartParamsSchema = z.object({ id: ExtensionIdSchema });
+
+// ---------------------------------------------------------------------------
 // Method registry
 // ---------------------------------------------------------------------------
 
@@ -242,6 +266,18 @@ export const MethodsSchema = {
     params: z.object({ report: ReportDraftSchema }),
     result: z.object({ id: z.string().min(1) }),
   },
+  "host.status": {
+    params: undefined,
+    result: z.object({ status: HostStatusSchema }),
+  },
+  "host.start": {
+    params: HostStartParamsSchema,
+    result: z.object({ status: HostStatusSchema }),
+  },
+  "host.stop": {
+    params: undefined,
+    result: z.object({ status: HostStatusSchema }),
+  },
 } as const;
 
 export type MethodName = keyof typeof MethodsSchema;
@@ -260,4 +296,6 @@ export const ErrorCodes = {
   INVALID_PARAMS: -32602,
   INTERNAL_ERROR: -32603,
   UNKNOWN_EXTENSION: 404,
+  /** A host job (migration) is already running. */
+  HOST_BUSY: 409,
 } as const;

@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import { ErrorCodes } from "@extlens/protocol";
 import { dispatch, RpcError } from "../src/rpc.js";
 import { makeStubBackend } from "./stub-backend.js";
+import type { Backend } from "../src/backend.js";
 
 function call(backend: unknown, method: string, params?: unknown) {
   return dispatch(backend as never, { id: 1, method, params });
@@ -183,5 +184,78 @@ describe("errors", () => {
     backend.listExtensions = async () => ({ extensions: [{ id: "x" }] }) as never;
     const res = await call(backend, "extensions.list");
     expect(res).toEqual({ error: { code: ErrorCodes.INTERNAL_ERROR, message: expect.any(String) } });
+  });
+});
+
+describe("host.status / host.start / host.stop", () => {
+  const running = {
+    state: "running",
+    extensionId: "mv2-b",
+    phase: "migrating",
+    startedAt: "2025-01-01T00:00:00.000Z",
+    message: null,
+  } as const;
+
+  function hostBackend(overrides?: Partial<NonNullable<Backend["host"]>>) {
+    const base = makeStubBackend();
+    base.host = {
+      async getStatus() {
+        return { ...running };
+      },
+      async start(id) {
+        if (id !== "mv2-b") throw new RpcError(ErrorCodes.UNKNOWN_EXTENSION, `unknown source extension: ${id}`);
+        return { ...running };
+      },
+      async stop() {
+        return { state: "idle", extensionId: null, phase: null, startedAt: null, message: null };
+      },
+      ...overrides,
+    };
+    return base;
+  }
+
+  test("host.status returns the controller status", async () => {
+    const res = await call(hostBackend(), "host.status");
+    expect(res).toEqual({ result: { status: running } });
+  });
+
+  test("host.start passes the id and returns status", async () => {
+    const res = await call(hostBackend(), "host.start", { id: "mv2-b" });
+    expect(res).toEqual({ result: { status: running } });
+  });
+
+  test("host.start with an unknown id -> 404", async () => {
+    const res = await call(hostBackend(), "host.start", { id: "nope" });
+    expect(res).toEqual({ error: { code: ErrorCodes.UNKNOWN_EXTENSION, message: expect.stringContaining("nope") } });
+  });
+
+  test("host.start while busy -> 409", async () => {
+    const res = await call(
+      hostBackend({
+        async start() {
+          throw new RpcError(ErrorCodes.HOST_BUSY, "migration already running for mv2-b");
+        },
+      }),
+      "host.start",
+      { id: "mv2-b" },
+    );
+    expect(res).toEqual({ error: { code: ErrorCodes.HOST_BUSY, message: expect.any(String) } });
+  });
+
+  test("host.stop returns the status", async () => {
+    const res = await call(hostBackend(), "host.stop");
+    expect(res).toEqual({ result: { status: { state: "idle", extensionId: null, phase: null, startedAt: null, message: null } } });
+  });
+
+  test("backend without a host controller -> -32601", async () => {
+    const backend = makeStubBackend();
+    delete backend.host;
+    const res = await call(backend, "host.status");
+    expect(res).toEqual({ error: { code: ErrorCodes.METHOD_NOT_FOUND, message: expect.stringContaining("not supported") } });
+  });
+
+  test("invalid params -> -32602", async () => {
+    const res = await call(hostBackend(), "host.start", { id: 42 });
+    expect(res).toEqual({ error: { code: ErrorCodes.INVALID_PARAMS, message: expect.any(String) } });
   });
 });

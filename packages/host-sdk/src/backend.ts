@@ -1,5 +1,6 @@
 import type {
   FileRefs,
+  HostStatus,
   ListParams,
   ListResult,
   Report,
@@ -25,6 +26,21 @@ export interface GetExtensionResult {
   profile?: Partial<ExtensionProfile>;
 }
 
+/**
+ * Optional host lifecycle controller behind host.status / host.start /
+ * host.stop. Implement it when the host can start and abort a job (for
+ * AgenticMigrator: a migration) for a listed extension. Throwing an RpcError
+ * maps to a protocol error (HOST_BUSY, UNKNOWN_EXTENSION, ...).
+ */
+export interface HostController {
+  /** Current lifecycle status. Never throws. */
+  getStatus(): Promise<HostStatus>;
+  /** Start a job for the extension. Throws when busy or the id is unknown. */
+  start(id: string): Promise<HostStatus>;
+  /** Abort the running job. No-op (returns status) when idle. */
+  stop(): Promise<HostStatus>;
+}
+
 export interface Backend {
   /** Light list plus aggregate stats for the explorer tab. */
   listExtensions(params: ListParams): Promise<ListResult>;
@@ -40,4 +56,7 @@ export interface Backend {
 
   /** Store (or replace) the report. Returns the report id. */
   submitReport(report: ReportDraft): Promise<string>;
+
+  /** Optional host lifecycle controller (migration start/stop/status). */
+  host?: HostController;
 }
