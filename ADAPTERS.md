@@ -124,20 +124,26 @@ Use `--out run/<name>` to accumulate multiple runs in one root.
 Two entry points:
 
 ```sh
-# serve the run you just produced
-migrate <extension-dir> --extlens-port 8081
+# serve the run you just produced (server starts before the migration and
+# keeps serving the completed run until Ctrl+C)
+migrate <extension-dir> --port 8081
 
 # serve a populated run directory without re-running a migration
+migrate --out ./run --port 8081
+# or the standalone entry (same thing)
 EXLENS_RUN_DIR=./run tsx src/extlens/index.ts --port 8081
 ```
 
 Environment: `EXLENS_PORT` (default 8081), `EXLENS_RUN_DIR` (default `./run`).
+The server is on by default; `--no-server` disables it for one-shot runs.
 
 ### Host changes beyond src/extlens/
 
 `src/cli.ts` records the source extension path (`source-path.txt`) after
-clearing the run dir, and starts the server after the migration when
-`--extlens-port` / `EXLENS_PORT` is set.
+clearing the run dir, then starts the server (default port 8081) before the
+migration so the client can watch the run dir fill in. The server stays alive
+after the migration until Ctrl+C. With no extension dir argument, the CLI
+serves the existing run dir without migrating (server-only mode).
 
 ## Not implemented: ExtPorter adapter
 
