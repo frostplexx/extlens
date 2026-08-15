@@ -12,6 +12,7 @@ import type {
   ReportDraftSchema,
   ReportSchema,
   ScoreBreakdownSchema,
+  SortOrderSchema,
 } from "./messages.js";
 
 /**
@@ -27,6 +28,7 @@ export type ManifestSummary = z.infer<typeof ManifestSummarySchema>;
 export type FileRefs = z.infer<typeof FileRefsSchema>;
 export type ListStats = z.infer<typeof ListStatsSchema>;
 export type ListParams = z.infer<typeof ListParamsSchema>;
+export type SortOrder = z.infer<typeof SortOrderSchema>;
 export type ListResult = z.infer<typeof ListResultSchema>;
 export type ReportDraft = z.infer<typeof ReportDraftSchema>;
 export type Report = z.infer<typeof ReportSchema>;
