@@ -6,6 +6,10 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.7.2"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json"
   }

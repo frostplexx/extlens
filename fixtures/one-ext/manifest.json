@@ -1,0 +1,18 @@
+{
+  "manifest_version": 2,
+  "name": "One Ext",
+  "version": "1.2.3",
+  "description": "Synthetic single-extension fixture with popup, background, and listeners",
+  "permissions": ["tabs", "cookies", "webRequest", "webRequestBlocking", "storage", "*://*.example.com/*"],
+  "background": { "scripts": ["background.js"], "persistent": true },
+  "browser_action": { "default_popup": "popup.html", "default_title": "One Ext" },
+  "content_scripts": [
+    {
+      "matches": ["https://*/*"],
+      "js": ["content.js"],
+      "css": []
+    }
+  ],
+  "options_page": "options.html",
+  "chrome_url_overrides": { "newtab": "newtab.html" }
+}
