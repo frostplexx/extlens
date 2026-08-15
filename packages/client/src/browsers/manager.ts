@@ -71,6 +71,10 @@ export class BrowserManager {
       const context = await chromium.launchPersistentContext("", {
         headless: false,
         executablePath: spec.executable,
+        // Playwright's default args include --disable-extensions, which would
+        // silently drop --load-extension (the ExtPorter analyzer client removes
+        // the same flag via chromiumoxide's disable_default_args).
+        ignoreDefaultArgs: ["--disable-extensions"],
         args: [`--load-extension=${spec.extensionPath}`, "--no-sandbox", ...V0_FLAGS],
       });
       this.contexts.push(context);
