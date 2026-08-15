@@ -60,6 +60,12 @@ Client environment:
 - `CHROME_OLD` — Chromium build that still runs MV2 (the analyzer tab's MV2
   browser)
 - `CHROME_LATEST` — Chromium build for MV3 (defaults to playwright's chromium)
+- `EXTLENS_BROWSER_DIR` — install dir for downloaded Chrome for Testing builds
+  (default `/tmp/extlens`)
+
+When a browser is missing, the analyzer tab asks whether to download Chrome
+for Testing and installs it under `EXTLENS_BROWSER_DIR`. MV2 gets Chrome 116
+(the last build that loads MV2 extensions); MV3 gets the latest stable build.
 
 ## Repo layout
 

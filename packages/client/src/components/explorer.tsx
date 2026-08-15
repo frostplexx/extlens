@@ -88,8 +88,8 @@ export function Explorer({ state }: { state: ExplorerState }) {
       <Box flexDirection="column" marginTop={1}>
         {error ? (
           <Text color="red">{error}</Text>
-        ) : loading && lights.length === 0 ? (
-          <Text dimColor>loading…</Text>
+        ) : loading ? (
+          <Text dimColor>{lights.length === 0 ? "loading…" : "refreshing…"}</Text>
         ) : lights.length === 0 ? (
           <Text dimColor>no extensions match</Text>
         ) : (

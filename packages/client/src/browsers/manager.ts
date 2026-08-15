@@ -1,5 +1,7 @@
+import { existsSync } from "node:fs";
 import { chromium, type BrowserContext } from "playwright";
 import { detectExtensionLoad } from "./load-status.js";
+import { installedExecutable } from "./install.js";
 import type { BrowserState } from "../types.js";
 
 /**
@@ -33,10 +35,17 @@ const V0_FLAGS = [
 
 export function resolveExecutable(label: "mv2" | "mv3"): string | null {
   const fromEnv = label === "mv2" ? process.env.CHROME_OLD : process.env.CHROME_LATEST;
-  if (fromEnv) return fromEnv;
+  if (fromEnv && existsSync(fromEnv)) return fromEnv;
+  const installed = installedExecutable(label);
+  if (installed) return installed;
   // MV3 falls back to playwright's bundled chromium; MV2 cannot (recent
-  // chromium builds no longer load MV2 extensions).
-  return label === "mv3" ? chromium.executablePath() : null;
+  // chromium builds no longer load MV2 extensions). A missing result means
+  // the app offers to download Chrome for Testing.
+  if (label === "mv3") {
+    const bundled = chromium.executablePath();
+    return bundled && existsSync(bundled) ? bundled : null;
+  }
+  return null;
 }
 
 export class BrowserManager {

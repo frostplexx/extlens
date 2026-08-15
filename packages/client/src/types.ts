@@ -33,7 +33,8 @@ export type BrowserPhase =
   | "detecting"
   | "loaded"
   | "failed"
-  | "closed";
+  | "closed"
+  | "downloading";
 
 export interface BrowserState {
   phase: BrowserPhase;
@@ -52,6 +53,8 @@ export interface AnalyzerState {
   mv3: BrowserState;
   /** True while the report form is open. */
   formOpen: boolean;
+  /** Missing browser waiting for a download decision, or null. */
+  prompt: { label: "mv2" | "mv3"; message: string } | null;
 }
 
 export type TriState = boolean | null;

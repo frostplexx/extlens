@@ -1,6 +1,7 @@
 import React from "react";
 import { Box, Text } from "ink";
 import type { ExtensionProfile, ManifestSummary, ScoreBreakdown } from "@extlens/protocol";
+import { BROWSER_DIR } from "../browsers/install.js";
 import type { AnalyzerState, BrowserState } from "../types.js";
 
 const BAR = "█";
@@ -158,6 +159,11 @@ export function Analyzer({ state }: { state: AnalyzerState }) {
         <Text bold underline>browsers</Text>
         <BrowserRow label="mv2" state={mv2} />
         <BrowserRow label="mv3" state={mv3} />
+        {state.prompt ? (
+          <Text color="yellow">
+            {state.prompt.message}. download Chrome for Testing into {BROWSER_DIR}? [y] yes [n] no
+          </Text>
+        ) : null}
         {files ? (
           <Text dimColor>
             mv2: {files.mv2}

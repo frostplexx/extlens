@@ -11,6 +11,11 @@ import type {
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ExtlensClient } from "./api.js";
+import {
+  BROWSER_DIR,
+  installChrome,
+  missingBrowserMessage,
+} from "./browsers/install.js";
 import { BrowserManager, resolveExecutable } from "./browsers/manager.js";
 import { Analyzer } from "./components/analyzer.js";
 import { Explorer } from "./components/explorer.js";
@@ -62,6 +67,7 @@ export function App({ wsUrl }: { wsUrl: string }) {
     mv2: IDLE_BROWSER,
     mv3: IDLE_BROWSER,
     formOpen: false,
+    prompt: null,
   });
   const [form, setForm] = useState<ReportDraftForm | null>(null);
 
@@ -83,9 +89,21 @@ export function App({ wsUrl }: { wsUrl: string }) {
     };
   }, [client]);
 
-  // Explorer fetch: runs when page / search / sort change.
+  // Explorer fetch: runs when the connection becomes available or when
+  // page / search / sort change. Without the status dependency, a connect
+  // that happens after the initial (failed) fetch would never retry.
   useEffect(() => {
     let cancelled = false;
+    if (status !== "connected") {
+      setExplorer((e) => ({
+        ...e,
+        loading: status === "connecting",
+        error: status === "connecting" ? null : "not connected",
+      }));
+      return () => {
+        cancelled = true;
+      };
+    }
     setExplorer((e) => ({ ...e, loading: true, error: null }));
     void client
       .call<ListResult>("extensions.list", {
@@ -111,7 +129,7 @@ export function App({ wsUrl }: { wsUrl: string }) {
     return () => {
       cancelled = true;
     };
-  }, [client, explorer.page, explorer.search, explorer.sort]);
+  }, [client, status, explorer.page, explorer.search, explorer.sort]);
 
   const loadProfile = useCallback(
     async (id: string) => {
@@ -150,31 +168,77 @@ export function App({ wsUrl }: { wsUrl: string }) {
       formOpen: false,
       mv2: IDLE_BROWSER,
       mv3: IDLE_BROWSER,
+      prompt: null,
     }));
     void loadProfile(light.id);
   }, [explorer.lights, explorer.selectedIndex, loadProfile]);
+
+  const launchOne = useCallback(
+    (label: "mv2" | "mv3", executable: string, extensionPath: string) => {
+      void browsersRef.current.launch(
+        { label, executable, extensionPath },
+        IDLE_BROWSER,
+        (next) => setAnalyzer((a) => ({ ...a, [label]: next })),
+      );
+    },
+    [],
+  );
 
   const runBrowsers = useCallback(async () => {
     const { id, files } = analyzer;
     if (!id || !files) return;
     const manager = browsersRef.current;
     await manager.closeAll();
-    setAnalyzer((a) => ({ ...a, mv2: IDLE_BROWSER, mv3: IDLE_BROWSER }));
-    if (files.mv2) {
-      void manager.launch(
-        { label: "mv2", executable: resolveExecutable("mv2"), extensionPath: fileRefToPath(files.mv2) },
-        analyzer.mv2,
-        (next) => setAnalyzer((a) => ({ ...a, mv2: next })),
-      );
+    setAnalyzer((a) => ({ ...a, mv2: IDLE_BROWSER, mv3: IDLE_BROWSER, prompt: null }));
+    for (const label of ["mv2", "mv3"] as const) {
+      const ref = files[label];
+      if (!ref) continue;
+      const executable = resolveExecutable(label);
+      if (!executable) {
+        setAnalyzer((a) => ({
+          ...a,
+          prompt: { label, message: missingBrowserMessage(label) },
+        }));
+        continue;
+      }
+      launchOne(label, executable, fileRefToPath(ref));
     }
-    if (files.mv3) {
-      void manager.launch(
-        { label: "mv3", executable: resolveExecutable("mv3"), extensionPath: fileRefToPath(files.mv3) },
-        analyzer.mv3,
-        (next) => setAnalyzer((a) => ({ ...a, mv3: next })),
-      );
-    }
-  }, [analyzer]);
+  }, [analyzer, launchOne]);
+
+  const downloadAndLaunch = useCallback(
+    async (label: "mv2" | "mv3") => {
+      const { id, files } = analyzer;
+      if (!id || !files || !files[label]) return;
+      setAnalyzer((a) => ({
+        ...a,
+        prompt: null,
+        [label]: { phase: "downloading", message: "downloading chrome for testing…", extensionId: null },
+      }));
+      try {
+        const executable = await installChrome(label, (pct) =>
+          setAnalyzer((a) => ({
+            ...a,
+            [label]: {
+              phase: "downloading",
+              message: `downloading chrome for testing… ${pct}%`,
+              extensionId: null,
+            },
+          })),
+        );
+        launchOne(label, executable, fileRefToPath(files[label]));
+      } catch (error) {
+        setAnalyzer((a) => ({
+          ...a,
+          [label]: {
+            phase: "failed",
+            message: error instanceof Error ? error.message : String(error),
+            extensionId: null,
+          },
+        }));
+      }
+    },
+    [analyzer, launchOne],
+  );
 
   const closeBrowsers = useCallback(async () => {
     await browsersRef.current.closeAll();
@@ -289,10 +353,23 @@ export function App({ wsUrl }: { wsUrl: string }) {
   useInput((input, key) => {
     if (tab === "analyzer" && analyzer.formOpen) return; // report form owns keys
 
+    const prompt = analyzer.prompt;
+    if (prompt) {
+      if (input === "y" || input === "Y") {
+        void downloadAndLaunch(prompt.label);
+      } else if (input === "n" || input === "N" || key.escape) {
+        setAnalyzer((a) => ({
+          ...a,
+          prompt: null,
+          [prompt.label]: { phase: "failed", message: prompt.message, extensionId: null },
+        }));
+      }
+      return;
+    }
     if (tab === "explorer" && explorer.searchFocused) {
       if (key.escape || key.return || key.upArrow || key.downArrow) {
         setExplorer((e) => ({ ...e, searchFocused: false }));
-      } else if (key.backspace) {
+      } else if (key.backspace || key.delete) {
         setExplorer((e) => ({ ...e, search: e.search.slice(0, -1) }));
       } else if (input && !key.ctrl && !key.meta) {
         setExplorer((e) => ({ ...e, search: e.search + input }));

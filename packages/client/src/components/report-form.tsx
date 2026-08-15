@@ -68,7 +68,7 @@ export function ReportForm({
         onToggleNotes();
         return;
       }
-      if (key.backspace) {
+      if (key.backspace || key.delete) {
         setNotesDraft(notesDraft.slice(0, -1));
         return;
       }
