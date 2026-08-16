@@ -207,7 +207,8 @@ export function createSshManager(options: SshManagerOptions): SshManager {
 
     if (result === "ok") {
       await waitForPort(port as number);
-      if (state === "stopped") return;
+      // stop() may have run during the wait; the local narrowing misses it.
+      if ((state as string) === "stopped") return;
       session = makeSession();
       state = "up";
       options.onStatus("up");
@@ -254,7 +255,8 @@ export function createSshManager(options: SshManagerOptions): SshManager {
     options.onStatus("down");
     stopProbe();
     await teardown();
-    if (state === "stopped") return;
+    // stop() may have run during teardown; the local narrowing misses it.
+    if ((state as string) === "stopped") return;
     state = "connecting";
     options.onStatus("reconnecting");
     await connect();

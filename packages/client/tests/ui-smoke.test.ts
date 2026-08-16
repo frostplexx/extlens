@@ -58,22 +58,58 @@ const analyzerState: AnalyzerState = {
     id: "e1",
     name: "sample-extension",
     version: "1.2.3",
-    manifestVersion: 2,
+    manifestVersion: 3,
     score: 87,
     sizeBytes: 12345,
-    tags: ["tag-a"],
+    tags: [],
     hasMv3: true,
-    breakdown: { webRequest: 4, htmlLines: 2, extensionSize: 1 },
+    breakdown: {
+      webRequest: 4,
+      htmlLines: 2,
+      storageLocal: 1,
+      backgroundPage: 1,
+      contentScripts: 1,
+      dangerousPermissions: 1,
+      hostPermissions: 1,
+      cryptoPatterns: 1,
+      networkRequests: 1,
+      extensionSize: 1,
+      apiRenames: 0,
+      manifestChanges: 0,
+      fileModifications: 0,
+      webRequestToDnr: 0,
+    },
     manifest: {
-      background: { type: "service_worker", scripts: ["bg.js"] },
+      manifestVersion: 3,
+      name: "sample-extension",
+      version: "1.2.3",
+      description: "Generates deep links for AliExpress",
+      id: "jfpmipfmnoleakbnehmhhoefgofjilba",
       permissions: ["storage"],
       hostPermissions: ["<all_urls>"],
+      background: { type: "service_worker", scripts: ["bg.js"] },
       contentScripts: [],
-      action: { defaultPopup: "popup.html" },
+      action: { defaultPopup: "popup.html", defaultTitle: null },
       optionsPage: null,
       chromeUrlOverrides: { newtab: null },
     },
-    listeners: [{ api: "chrome.runtime.onMessage", file: "bg.js", line: 12 }],
+    mv2: {
+      manifestVersion: 2,
+      name: "DeepAli (mv2)",
+      version: "1.0.9",
+      description: "mv2 description",
+      id: "jfpmipfmnoleakbnehmhhoefgofjilba",
+      permissions: ["storage", "tabs"],
+      hostPermissions: [],
+      background: { type: "page", scripts: ["background.js"] },
+      contentScripts: [],
+      action: null,
+      optionsPage: null,
+      chromeUrlOverrides: { newtab: null },
+    },
+    listeners: [
+      { api: "chrome.runtime.onMessage", file: "bg.js", line: 12, snippet: "chrome.runtime.onMessage.addListener" },
+    ],
   },
   files: { mv2: "/tmp/x/mv2" },
   report: null,
@@ -134,7 +170,10 @@ describe("ui rendering", () => {
   it("renders analyzer sections and browser rows", async () => {
     const out = await capture(React.createElement(Analyzer, { state: analyzerState }));
     expect(out).toContain("breakdown");
-    expect(out).toContain("manifest");
+    expect(out).toContain("manifest (mv3)");
+    expect(out).toContain("manifest (mv2)");
+    expect(out).toContain("jfpmipfmnoleakbnehmhhoefgofjilba");
+    expect(out).toContain("Generates deep links for AliExpress");
     expect(out).toContain("listeners");
     expect(out).toContain("chrome.runtime.onMessage");
     expect(out).toContain("mv2 loaded");

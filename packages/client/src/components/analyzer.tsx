@@ -61,13 +61,13 @@ function ManifestView({
     ...(manifest.description
       ? [["description", manifest.description] as [string, string]]
       : []),
-    ["background", bg],
-    ["permissions", manifest.permissions.join(", ")],
-    ["host permissions", manifest.hostPermissions.join(", ")],
-    ["content scripts", manifest.contentScripts.map((cs) => `${cs.matches.join("|")} → ${cs.js.join(", ")}`).join("; ")],
-    ["popup", manifest.action?.defaultPopup ?? ""],
-    ["options page", manifest.optionsPage ?? ""],
-    ["new tab override", manifest.chromeUrlOverrides.newtab ?? ""],
+    ["background", bg] as [string, string],
+    ["permissions", manifest.permissions.join(", ")] as [string, string],
+    ["host permissions", manifest.hostPermissions.join(", ")] as [string, string],
+    ["content scripts", manifest.contentScripts.map((cs) => `${cs.matches.join("|")} → ${cs.js.join(", ")}`).join("; ")] as [string, string],
+    ["popup", manifest.action?.defaultPopup ?? ""] as [string, string],
+    ["options page", manifest.optionsPage ?? ""] as [string, string],
+    ["new tab override", manifest.chromeUrlOverrides.newtab ?? ""] as [string, string],
   ].filter(([, value]) => value !== "");
   return (
     <Box flexDirection="column">
