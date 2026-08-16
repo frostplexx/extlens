@@ -29,6 +29,7 @@ import type {
   Tab,
   TriState,
 } from "./types.js";
+import type { SshSession } from "./ssh.js";
 
 const SORTS: SortOrder[] = ["interestingness_desc", "interestingness_asc", "name"];
 
@@ -40,7 +41,15 @@ function fileRefToPath(ref: string): string {
   return path;
 }
 
-export function App({ wsUrl }: { wsUrl: string }) {
+export function App({
+  wsUrl,
+  ssh = null,
+}: {
+  wsUrl: string;
+  /** Active ssh session; null in local mode. Remote file refs download into
+   *  a local cache before browser launch. */
+  ssh?: SshSession | null;
+}) {
   const { exit } = useApp();
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -139,9 +148,18 @@ export function App({ wsUrl }: { wsUrl: string }) {
           client.call<{ files: FileRefs }>("extensions.files", { id }),
           client.call<{ report: Report | null }>("reports.get", { extensionId: id }),
         ]);
+        let fileRefs = files.files;
+        if (ssh) {
+          const resolved: FileRefs = {};
+          for (const label of ["mv2", "mv3"] as const) {
+            const ref = files.files[label];
+            if (ref) resolved[label] = await ssh.downloadRef(label, id, ref);
+          }
+          fileRefs = resolved;
+        }
         setAnalyzer((a) =>
           a.id === id
-            ? { ...a, profile: get.extension, files: files.files, report: report.report, loading: false }
+            ? { ...a, profile: get.extension, files: fileRefs, report: report.report, loading: false }
             : a,
         );
       } catch (error) {
@@ -150,7 +168,7 @@ export function App({ wsUrl }: { wsUrl: string }) {
         );
       }
     },
-    [client],
+    [client, ssh],
   );
 
   const openAnalyzer = useCallback(() => {
@@ -452,7 +470,12 @@ export function App({ wsUrl }: { wsUrl: string }) {
           listenerApis={(analyzer.profile?.listeners ?? []).map((l) => ({ api: l.api, file: l.file }))}
         />
       ) : null}
-      <StatusBar status={status} message={statusMessage} tab={tab} />
+      <StatusBar
+        status={status}
+        message={statusMessage}
+        tab={tab}
+        sshLabel={ssh ? ssh.destination : null}
+      />
     </Box>
   );
 }

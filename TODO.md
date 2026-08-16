@@ -9,6 +9,13 @@
 - [ ] Verify the missing-browser prompt downloads Chrome for Testing into `EXTLENS_BROWSER_DIR`
 - [ ] Verify the explorer list loads when the connection becomes ready — refetch-on-connect
 - [ ] Verify MV2 Chrome for Testing 116.0.5845.96 loads MV2 without enterprise policy
+- [ ] Verify SSH key auth — `npm run client -- --ssh <alias>` starts the TUI without a
+  prompt, the analyzer launches browsers from cached files, and `ssh -O exit` tears the
+  master down on quit (packages/client/src/ssh.ts)
+- [ ] Verify SSH password auth — the prompt appears before the TUI; the tunnel connects
+  after entry; downloads do not re-prompt
+- [ ] Verify the SSH session against a jump-host alias and against a `file://` ref
+  (mv2 as a manifest.json file, mv3 as a directory)
 
 ## Blocked on user action
 

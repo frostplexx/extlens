@@ -16,6 +16,8 @@ computes profiles with a pure analyzer. The client never touches host storage.
   report form).
 - A real adapter: AgenticMigrator (`src/extlens/` in that repo) serves its
   `run/` outputs.
+- SSH mode: the client tunnels the WebSocket to a remote host and proxies its
+  file refs, so a remote AgenticMigrator host works like a local one.
 
 ## Quickstart
 
@@ -50,6 +52,14 @@ Connect the client:
 npm run client -- --ws ws://localhost:8081
 ```
 
+Or connect to a remote host over SSH (the host must already run on the
+remote):
+
+```sh
+npm run client -- --ssh myserver
+npm run client -- --ssh user@host --remote-port 8081
+```
+
 ## Client keybindings
 
 - `/` — focus search
@@ -62,6 +72,10 @@ npm run client -- --ws ws://localhost:8081
 Client environment:
 
 - `EXTLENS_WS` — host URL (default `ws://localhost:8081`), or `--ws` flag
+- `EXTLENS_SSH` — ssh destination (`user@host` or an `~/.ssh/config` alias),
+  or `--ssh` flag. Takes precedence over `--ws`
+- `EXTLENS_REMOTE_PORT` — the host's ws port on the remote (default 8081), or
+  `--remote-port` flag
 - `CHROME_OLD` — Chromium build that still runs MV2 (the analyzer tab's MV2
   browser)
 - `CHROME_LATEST` — Chromium build for MV3 (defaults to playwright's chromium)
@@ -71,6 +85,21 @@ Client environment:
 When a browser is missing, the analyzer tab asks whether to download Chrome
 for Testing and installs it under `EXTLENS_BROWSER_DIR`. MV2 gets Chrome 116
 (the last build that loads MV2 extensions); MV3 gets the latest stable build.
+
+## SSH mode
+
+With `--ssh`, the client uses the system `ssh` binary to reach the remote
+host. It forwards the WebSocket through an `ssh -L` tunnel and downloads the
+`extensions.files` refs into a local cache before the browser launches. The
+client spawns OpenSSH, so `~/.ssh/config` aliases, jump hosts, host-key
+verification, key auth, and password auth all work as they do with plain
+`ssh`.
+
+A password prompt appears in the terminal before the TUI starts. Key auth
+needs no prompt. One control master serves the tunnel and the file downloads,
+so nothing re-prompts mid-session. The client tears the master down on quit.
+
+If the tunnel drops, quit the client and start it again.
 
 ## Repo layout
 
@@ -93,5 +122,5 @@ fixtures/           — synthetic extensions with hand-computed golden scores
 ## Status
 
 Implemented: protocol, analyzer, host SDK, client (explorer + analyzer tabs),
-AgenticMigrator adapter, docs. Not implemented: ExtPorter adapter (see
+AgenticMigrator adapter, SSH mode, docs. Not implemented: ExtPorter adapter (see
 ADAPTERS.md), phase 2 folder mode (SQLite `FolderBackend`, `extlens serve`).

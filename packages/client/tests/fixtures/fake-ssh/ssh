@@ -1,0 +1,38 @@
+#!/usr/bin/env node
+// Fake ssh for integration tests. Emulates the OpenSSH surface the client
+// uses, without any real server:
+//   - the tunnel case (-L ...) spawns a detached TCP forwarder and exits 0,
+//     like `ssh -f -N -M`
+//   - the download case runs the trailing remote command through /bin/sh
+//     locally, like a shell on the remote
+//   - the close case (-O exit) exits 0
+// The forwarder watches CONTROL_PATH and exits when the client removes it.
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+const args = process.argv.slice(2);
+
+if (args.includes("-O") && args.includes("exit")) {
+  process.exit(0);
+}
+
+const listen = args.indexOf("-L");
+if (listen !== -1) {
+  const spec = args[listen + 1];
+  const [, localPort, , remotePort] = spec.split(":");
+  const controlArg = args.find((a) => a.startsWith("ControlPath="));
+  const controlPath = controlArg.slice("ControlPath=".length);
+  const here = dirname(fileURLToPath(import.meta.url));
+  const forwarder = spawn(
+    process.execPath,
+    [join(here, "forward.mjs"), localPort, remotePort, controlPath],
+    { stdio: "ignore", detached: true },
+  );
+  forwarder.unref();
+  process.exit(0);
+}
+
+const remoteCommand = args[args.length - 1];
+const child = spawn("/bin/sh", ["-c", remoteCommand], { stdio: "inherit" });
+child.on("exit", (code) => process.exit(code ?? 1));
