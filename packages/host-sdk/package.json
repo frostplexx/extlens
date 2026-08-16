@@ -29,9 +29,9 @@
   "dependencies": {
     "@extlens/analyzer": "*",
     "@extlens/protocol": "*",
+    "better-sqlite3": "^13.0.3",
     "ws": "^8.18.3",
-    "zod": "^3.25.76",
-    "better-sqlite3": "^12.10.0"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
