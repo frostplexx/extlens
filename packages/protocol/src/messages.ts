@@ -151,6 +151,8 @@ export const ManifestSummarySchema = z.object({
   name: z.string(),
   version: z.string().nullable(),
   description: z.string().nullable(),
+  /** Chrome extension id for this manifest: key-derived, else host-assigned. */
+  id: z.string().nullable().optional(),
   permissions: z.array(z.string()),
   hostPermissions: z.array(z.string()),
   background: BackgroundSummarySchema.nullable(),
@@ -170,6 +172,8 @@ export const ExtensionProfileSchema = z.object({
   tags: z.array(z.string()),
   listeners: z.array(ListenerSchema),
   manifest: ManifestSummarySchema,
+  /** Manifest summary of the mv2 source, when the extension was migrated. */
+  mv2: ManifestSummarySchema.nullable().optional(),
   sizeBytes: z.number().int().nonnegative(),
   hasMv3: z.boolean(),
 });

@@ -286,5 +286,5 @@ protocol reserves their names so hosts can detect a newer client.
 
 ## Changelog
 
-- v2 — `extensions.list` page arrays cannot exceed 200 rows. Hosts must paginate; the SDK rejects oversized pages. Client requests one screen per page and debounces search.
+- v2 — `extensions.list` page arrays cannot exceed 200 rows. Hosts must paginate; the SDK rejects oversized pages. Client requests one screen per page and debounces search. Manifest summaries gain an optional key-derived `id`; extension profiles gain an optional `mv2` summary. The SDK resolves `__MSG_...__` names and descriptions from `_locales`.
 - v1 — initial protocol: ping, extensions.list/get/files, reports.get/submit.

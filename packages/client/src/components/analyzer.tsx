@@ -43,12 +43,24 @@ function Breakdown({ breakdown }: { breakdown: ScoreBreakdown }) {
   );
 }
 
-function ManifestView({ manifest }: { manifest: ManifestSummary }) {
+function ManifestView({
+  manifest,
+  showName = false,
+}: {
+  manifest: ManifestSummary;
+  /** Render the name row; the current variant's name lives in the header. */
+  showName?: boolean;
+}) {
   const bg =
     manifest.background === null
       ? "none"
       : `${manifest.background.type}(${manifest.background.scripts.join(", ")})`;
   const rows: [string, string][] = [
+    ...(showName ? [["name", manifest.name] as [string, string]] : []),
+    ...(manifest.id ? [["id", manifest.id] as [string, string]] : []),
+    ...(manifest.description
+      ? [["description", manifest.description] as [string, string]]
+      : []),
     ["background", bg],
     ["permissions", manifest.permissions.join(", ")],
     ["host permissions", manifest.hostPermissions.join(", ")],
@@ -128,8 +140,14 @@ export function Analyzer({ state }: { state: AnalyzerState }) {
       <Section title="breakdown" />
       <Breakdown breakdown={profile.breakdown} />
 
-      <Section title="manifest" />
+      <Section title={profile.mv2 ? "manifest (mv3)" : "manifest"} />
       <ManifestView manifest={profile.manifest} />
+      {profile.mv2 ? (
+        <>
+          <Section title="manifest (mv2)" />
+          <ManifestView manifest={profile.mv2} showName />
+        </>
+      ) : null}
 
       <Section title="listeners" hint={`${profile.listeners.length} detected`} />
       {profile.listeners.length === 0 ? (

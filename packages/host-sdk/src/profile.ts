@@ -1,6 +1,7 @@
 import { analyzeExtension } from "@extlens/analyzer";
+import { extensionIdFromKey, resolveManifestStrings } from "@extlens/analyzer";
 import type { ExtensionProfile, ManifestSummary } from "@extlens/protocol";
-import type { ExtensionSource, Manifest } from "@extlens/analyzer";
+import type { ExtensionSource, Manifest, SourceFile } from "@extlens/analyzer";
 
 function strings(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
@@ -11,7 +12,11 @@ function obj(value: unknown): Record<string, unknown> {
 }
 
 /** Build the protocol ManifestSummary from a parsed manifest.json. */
-export function summarizeManifest(manifest: Manifest): ManifestSummary {
+export function summarizeManifest(
+  manifest: Manifest,
+  files: SourceFile[] = [],
+  fallbackId: string | null = null,
+): ManifestSummary {
   const backgroundRaw = obj(manifest.background);
   const serviceWorker =
     typeof backgroundRaw.service_worker === "string" ? backgroundRaw.service_worker : null;
@@ -33,12 +38,14 @@ export function summarizeManifest(manifest: Manifest): ManifestSummary {
   );
 
   const overrides = obj(manifest.chrome_url_overrides);
+  const strings2 = resolveManifestStrings(manifest, files);
 
   return {
     manifestVersion: typeof manifest.manifest_version === "number" ? manifest.manifest_version : 2,
-    name: typeof manifest.name === "string" ? manifest.name : "",
+    name: strings2.name,
     version: typeof manifest.version === "string" ? manifest.version : null,
-    description: typeof manifest.description === "string" ? manifest.description : null,
+    description: strings2.description,
+    id: extensionIdFromKey(manifest.key) ?? fallbackId,
     permissions: strings(manifest.permissions),
     hostPermissions: strings(manifest.host_permissions),
     background,
@@ -74,7 +81,8 @@ export function computeProfile(source: ExtensionSource): ExtensionProfile {
     breakdown: analysis.breakdown,
     tags: analysis.tags,
     listeners: analysis.listeners,
-    manifest: summarizeManifest(source.manifest),
+    manifest: summarizeManifest(source.manifest, source.files, source.id),
+    mv2: null,
     sizeBytes: analysis.sizeBytes,
     hasMv3: false,
   };

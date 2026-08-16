@@ -56,6 +56,9 @@ const backend: Backend = {
     return {
       source: { id, manifest, files: [{ path, type, content }] },
       profile: { /* optional Partial<ExtensionProfile> overrides */ },
+      // For a migrated extension, set profile.mv2 to the mv2 source's
+      // ManifestSummary (name, id, description, ...). The SDK resolves
+      // __MSG_...__ names from _locales and derives ids from the manifest key.
     };
   },
 

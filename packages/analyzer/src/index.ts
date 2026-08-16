@@ -10,6 +10,7 @@
  */
 import { analyzeFiles } from "./file-analyzer.js";
 import { tagExtension } from "./feature-tagger.js";
+import { resolveManifestStrings } from "./i18n.js";
 import { extractListeners } from "./listener-extractor.js";
 import { analyzeManifest } from "./manifest-analyzer.js";
 import { emptyBreakdown, scoreBreakdown, type ScoreBreakdown } from "./scoring.js";
@@ -19,6 +20,7 @@ import type { AnalysisProfile, ExtensionSource } from "./types.js";
 export { DANGEROUS_PERMISSIONS, WEIGHTS } from "./scoring.js";
 export type { ScoreBreakdown } from "./scoring.js";
 export { extractListeners } from "./listener-extractor.js";
+export { extensionIdFromKey, resolveManifestStrings } from "./i18n.js";
 export type { AnalysisProfile, ExtensionSource, Listener, Manifest, SourceFile } from "./types.js";
 
 export function analyzeExtension(source: ExtensionSource): AnalysisProfile {
@@ -46,7 +48,8 @@ export function analyzeExtension(source: ExtensionSource): AnalysisProfile {
 
   const manifestVersion =
     typeof source.manifest.manifest_version === "number" ? source.manifest.manifest_version : 2;
-  const name = typeof source.manifest.name === "string" ? source.manifest.name : source.id;
+  const resolved = resolveManifestStrings(source.manifest, source.files);
+  const name = typeof source.manifest.name === "string" ? resolved.name : source.id;
   const version = typeof source.manifest.version === "string" ? source.manifest.version : null;
 
   return {
