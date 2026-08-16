@@ -3,10 +3,7 @@ import { Box, Text } from "ink";
 import type { ExtensionProfile, ManifestSummary, ScoreBreakdown } from "@extlens/protocol";
 import { BROWSER_DIR } from "../browsers/install.js";
 import type { AnalyzerState, BrowserPhase, BrowserState } from "../types.js";
-import { EmptyLine, ErrorLine, Loading, Rule, Section } from "./ui.js";
-
-const BAR = "█";
-const EMPTY = "░";
+import { EmptyLine, ErrorLine, Loading, Section } from "./ui.js";
 
 const BREAKDOWN_LABELS: [keyof ScoreBreakdown, string][] = [
   ["webRequest", "webRequest"],
@@ -25,20 +22,21 @@ const BREAKDOWN_LABELS: [keyof ScoreBreakdown, string][] = [
   ["webRequestToDnr", "webRequest→DNR (host)"],
 ];
 
-function breakdownBar(count: number, max: number): string {
-  const filled = Math.max(0, Math.round((count / Math.max(1, max)) * 10));
-  return BAR.repeat(filled) + EMPTY.repeat(10 - filled);
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function Breakdown({ breakdown }: { breakdown: ScoreBreakdown }) {
-  const max = Math.max(1, ...Object.values(breakdown));
   return (
     <Box flexDirection="column">
       {BREAKDOWN_LABELS.filter(([key]) => breakdown[key] > 0).map(([key, label]) => (
         <Text key={key}>
           <Text dimColor>{label.padEnd(22)}</Text>
-          <Text color="cyan">{breakdownBar(breakdown[key], max)}</Text>
-          <Text> {String(breakdown[key]).padStart(3)}</Text>
+          <Text bold color="cyan">
+            {String(breakdown[key]).padStart(6)}
+          </Text>
         </Text>
       ))}
     </Box>
@@ -117,21 +115,15 @@ export function Analyzer({ state }: { state: AnalyzerState }) {
           {profile.name}
         </Text>
         <Text dimColor> v{profile.version ?? "?"} · mv{profile.manifestVersion}</Text>
-        {profile.hasMv3 ? (
-          <Text color="green"> · has mv3 variant</Text>
-        ) : (
-          <Text dimColor> · mv2 only</Text>
-        )}
+        {profile.hasMv3 ? <Text color="green"> · has mv3 variant</Text> : null}
       </Text>
       <Text>
         <Text dimColor>score </Text>
         <Text bold color="cyan">
           {profile.score}
         </Text>
-        <Text dimColor> · {profile.sizeBytes} bytes</Text>
-        {profile.tags.length > 0 ? <Text dimColor>  {profile.tags.join(" ")}</Text> : null}
+        <Text dimColor> · {formatBytes(profile.sizeBytes)}</Text>
       </Text>
-      <Rule marginTop={1} />
 
       <Section title="breakdown" />
       <Breakdown breakdown={profile.breakdown} />
