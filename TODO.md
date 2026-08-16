@@ -19,6 +19,17 @@
 - [ ] Verify `extensions.list` pagination at scale — the SDK rejects a page over 200
   rows (`Too many items`), the client requests one screen per page, and search is
   debounced (packages/protocol/src/messages.ts, packages/client/src/app.tsx)
+- [ ] Verify host lifecycle UI — `m` starts a migration for the selected source row
+  (top bar shows `running <id> (<phase>)`), `m` again stops it, the list refetches
+  when the job ends, and hosts without a HostController hide the segment
+  (packages/client/src/app.tsx)
+- [ ] Verify folder mode — `node packages/host-sdk/bin/extlens.mjs serve <corpus>`
+  then connect the client; first connect indexes, later connects are fast; search
+  and sort run host-side; reports persist across restarts; `--db PATH` moves the
+  sqlite file (packages/host-sdk/src/folder.ts)
+- [ ] Verify better-sqlite3 installs on your machine — the sandbox installed it
+  offline from the npm cache; a normal `npm install` must fetch it and build the
+  native binding (it is in package-lock.json and packages/host-sdk/package.json)
 
 ## Blocked on user action
 
@@ -27,7 +38,8 @@
 
 ## Missing features
 
-- [ ] Add host lifecycle UI to the ink client — `host.start`/`host.stop` controls on explorer rows; the protocol and AgenticMigrator controller exist, but the client only speaks wire-level
+- [ ] Nothing pending. (Host lifecycle UI and Phase 2 folder mode are done;
+  see the verify items below.)
 - [ ] Publish `extlens-sdk` to npm — remove `"private": true`, add a `prepublishOnly` tsup build, publish or bundle `@extlens/protocol` + `@extlens/analyzer`, then switch AgenticMigrator's `file:` dep to a semver range (packages/host-sdk/package.json)
 - [ ] Update the PROTOCOL.md changelog — `host.status`/`host.start`/`host.stop`, `HOST_BUSY: 409`, and optional `FileRefs.mv2` are missing (PROTOCOL.md:281)
 

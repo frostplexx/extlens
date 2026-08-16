@@ -18,6 +18,8 @@ import type { ExtlensServerHandle, ExtlensServerOptions } from "./ws.js";
 export { RpcError } from "./rpc.js";
 export { computeProfile, summarizeManifest } from "./profile.js";
 export type { Backend, GetExtensionResult, HostController } from "./backend.js";
+export { createFolderBackend, discoverExtensions, extensionIdFromPath } from "./folder.js";
+export type { FolderBackendOptions } from "./folder.js";
 
 export * from "@extlens/protocol";
 export type { ExtensionSource, Manifest, SourceFile } from "@extlens/analyzer";

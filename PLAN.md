@@ -257,12 +257,16 @@ Step 9 — Docs and polish (DONE)
   walkthrough, ExtPorter status, distribution path.
 - Error surfacing polish: server errors rendered in the client status bar.
 
-Phase 2 (designed now, not implemented)
-- Folder mode: ingest (discover + analyzer) and a SQLite FolderBackend (better-sqlite3),
-  shipped in the SDK. Schema in phase2/schema.sql (extensions, reports tables; id is a stable
-  sha256 of the absolute path; indexes on name and interestingness_score).
-- `extlens serve <folder>` runs standalone with no host.
-- The protocol and Backend interface do not change; FolderBackend is another implementation.
+Phase 2 (implemented)
+- Folder mode: ingest (discover + analyzer) and a SQLite FolderBackend
+  (better-sqlite3), shipped in the SDK. Schema in phase2/schema.sql
+  (extensions, reports tables; id is a stable sha256 of the absolute path;
+  indexes on name and interestingness_score). Implemented in
+  packages/host-sdk/src/folder.ts.
+- `extlens serve <folder>` runs standalone with no host (the SDK bin,
+  packages/host-sdk/bin/extlens.mjs).
+- The protocol and Backend interface do not change; FolderBackend is another
+  implementation. Tests: packages/host-sdk/tests/folder.test.ts.
 
 ## Testing plan
 
@@ -283,7 +287,7 @@ Phase 2 (designed now, not implemented)
 - The SDK publishes to npm as `extlens-sdk` (free on npm). Hosts install it like any node
   dependency. A `prepublishOnly` build runs tsup (ESM + CJS + types).
 - Adapters land in the host repos; each host owns its adapter code.
-- Phase 2 (folder mode) is designed now and implemented after v1 review.
+- Phase 2 (folder mode) is implemented; see the section above.
 
 ## Non-goals (v1)
 

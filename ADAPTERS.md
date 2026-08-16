@@ -175,6 +175,40 @@ the five Backend methods, and its stored `interestingness_score`,
 `interestingness_breakdown` (snake_case), `tags`, and `event_listeners` become
 `Partial<ExtensionProfile>` overrides.
 
+## FolderBackend (phase 2, implemented)
+
+`createFolderBackend(folder, opts)` serves a plain directory of Chrome
+extensions with no host project. It lives in the SDK:
+
+```ts
+import { createFolderBackend, createExtlensServer } from "extlens-sdk";
+const backend = createFolderBackend("./corpus");
+const server = createExtlensServer({ port: 8081, backend });
+```
+
+Behavior:
+
+- Discovery finds every extension root (a directory containing `manifest.json`,
+  deepest match per corpus entry; `.`-prefixed dirs, `node_modules`, and `.git`
+  are skipped). The extension id is the sha256 of the absolute source dir.
+- Ingest runs the analyzer once per extension and stores the profile in
+  SQLite (`<folder>/.extlens.sqlite`, or `opts.dbPath`). Lists, search, and
+  sort serve from indexed SQL, so large folders stay responsive.
+- Re-ingest is lazy: an extension whose manifest mtime changed is re-analyzed
+  on the next `extensions.get` (`opts.refresh === false` disables this).
+- Reports persist in SQLite (one per extension). File refs are `file://`
+  paths; an MV3 manifest serves as `mv3`, an MV2 as `mv2`.
+- No `host` controller: folder mode has no jobs, so `host.status` returns
+  method-not-found and the client hides the lifecycle UI.
+
+The standalone CLI is `extlens serve <folder>` (the SDK's `bin`):
+
+```sh
+extlens serve ./corpus --port 8081 [--host H] [--db PATH]
+```
+
+Schema: `phase2/schema.sql`.
+
 ## File references
 
 `extensions.files` returns `{ mv2?, mv3? }`. v1 hosts return absolute local
@@ -186,5 +220,5 @@ reserves `http(s)://` for the remote-host form in a later phase.
 1. Local: `file:` dependency as above.
 2. Publish `extlens-sdk` (`npm publish` from `packages/host-sdk`), switch hosts
    to a semver range.
-3. Phase 2 adds a `FolderBackend` (SQLite) inside the SDK so extlens can serve
-   a plain folder with no host at all.
+3. The SDK ships `FolderBackend` + `extlens serve <folder>` (see above), so
+   extlens can serve a plain folder with no host at all.

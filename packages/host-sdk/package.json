@@ -18,7 +18,9 @@
       }
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit -p tsconfig.json",
@@ -28,12 +30,16 @@
     "@extlens/analyzer": "*",
     "@extlens/protocol": "*",
     "ws": "^8.18.3",
-    "zod": "^3.25.76"
+    "zod": "^3.25.76",
+    "better-sqlite3": "^12.10.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "@types/ws": "^8.5.13",
     "tsup": "^8.3.0",
     "typescript": "^5.7.2"
+  },
+  "bin": {
+    "extlens": "bin/extlens.mjs"
   }
 }

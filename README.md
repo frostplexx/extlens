@@ -34,6 +34,17 @@ Start a host. The in-repo stub server serves the fixtures:
 tsx examples/stub-server.ts --port 8081
 ```
 
+Serve a plain folder of Chrome extensions standalone (no host project):
+
+```sh
+node packages/host-sdk/bin/extlens.mjs serve ./corpus --port 8081
+# after installing the sdk: `npx extlens serve ./corpus`
+```
+
+Folder mode indexes the corpus into SQLite once (`<folder>/.extlens.sqlite`);
+lists, search, and sort then serve from indexed SQL. A changed manifest is
+re-analyzed on the next `extensions.get`.
+
 Or run the real AgenticMigrator adapter (see ADAPTERS.md):
 
 ```sh
