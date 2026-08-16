@@ -2,7 +2,8 @@ import React from "react";
 import { Box, Text } from "ink";
 import type { ExtensionProfile, ManifestSummary, ScoreBreakdown } from "@extlens/protocol";
 import { BROWSER_DIR } from "../browsers/install.js";
-import type { AnalyzerState, BrowserState } from "../types.js";
+import type { AnalyzerState, BrowserPhase, BrowserState } from "../types.js";
+import { EmptyLine, ErrorLine, Loading, Rule, Section } from "./ui.js";
 
 const BAR = "█";
 const EMPTY = "░";
@@ -35,7 +36,7 @@ function Breakdown({ breakdown }: { breakdown: ScoreBreakdown }) {
     <Box flexDirection="column">
       {BREAKDOWN_LABELS.filter(([key]) => breakdown[key] > 0).map(([key, label]) => (
         <Text key={key}>
-          <Text dimColor>{label.padEnd(24)}</Text>
+          <Text dimColor>{label.padEnd(22)}</Text>
           <Text color="cyan">{breakdownBar(breakdown[key], max)}</Text>
           <Text> {String(breakdown[key]).padStart(3)}</Text>
         </Text>
@@ -49,57 +50,39 @@ function ManifestView({ manifest }: { manifest: ManifestSummary }) {
     manifest.background === null
       ? "none"
       : `${manifest.background.type}(${manifest.background.scripts.join(", ")})`;
+  const rows: [string, string][] = [
+    ["background", bg],
+    ["permissions", manifest.permissions.join(", ")],
+    ["host permissions", manifest.hostPermissions.join(", ")],
+    ["content scripts", manifest.contentScripts.map((cs) => `${cs.matches.join("|")} → ${cs.js.join(", ")}`).join("; ")],
+    ["popup", manifest.action?.defaultPopup ?? ""],
+    ["options page", manifest.optionsPage ?? ""],
+    ["new tab override", manifest.chromeUrlOverrides.newtab ?? ""],
+  ].filter(([, value]) => value !== "");
   return (
     <Box flexDirection="column">
-      <Text>
-        <Text dimColor>background: </Text>
-        {bg}
-      </Text>
-      {manifest.permissions.length > 0 ? (
-        <Text>
-          <Text dimColor>permissions: </Text>
-          {manifest.permissions.join(", ")}
+      {rows.map(([label, value]) => (
+        <Text key={label}>
+          <Text dimColor>{`${label}:`.padEnd(22)}</Text>
+          {value}
         </Text>
-      ) : null}
-      {manifest.hostPermissions.length > 0 ? (
-        <Text>
-          <Text dimColor>host permissions: </Text>
-          {manifest.hostPermissions.join(", ")}
-        </Text>
-      ) : null}
-      {manifest.contentScripts.length > 0 ? (
-        <Text>
-          <Text dimColor>content scripts: </Text>
-          {manifest.contentScripts
-            .map((cs) => `${cs.matches.join("|")} → ${cs.js.join(", ")}`)
-            .join("; ")}
-        </Text>
-      ) : null}
-      {manifest.action?.defaultPopup ? (
-        <Text>
-          <Text dimColor>popup: </Text>
-          {manifest.action.defaultPopup}
-        </Text>
-      ) : null}
-      {manifest.optionsPage ? (
-        <Text>
-          <Text dimColor>options page: </Text>
-          {manifest.optionsPage}
-        </Text>
-      ) : null}
-      {manifest.chromeUrlOverrides.newtab ? (
-        <Text>
-          <Text dimColor>new tab override: </Text>
-          {manifest.chromeUrlOverrides.newtab}
-        </Text>
-      ) : null}
+      ))}
     </Box>
   );
 }
 
+const PHASE_COLORS: Record<BrowserPhase, string> = {
+  idle: "gray",
+  launching: "yellow",
+  detecting: "yellow",
+  downloading: "yellow",
+  loaded: "green",
+  failed: "red",
+  closed: "gray",
+};
+
 function BrowserRow({ label, state }: { label: string; state: BrowserState }) {
-  const color =
-    state.phase === "loaded" ? "green" : state.phase === "failed" ? "red" : state.phase === "idle" ? "gray" : "yellow";
+  const color = PHASE_COLORS[state.phase] ?? "gray";
   return (
     <Text>
       <Text dimColor>{label.padEnd(4)}</Text>
@@ -110,80 +93,107 @@ function BrowserRow({ label, state }: { label: string; state: BrowserState }) {
 }
 
 export function Analyzer({ state }: { state: AnalyzerState }) {
-  const { profile, report, loading, error, mv2, mv3, files } = state;
+  const { profile, report, loading, error, mv2, mv3, files, prompt } = state;
 
-  if (loading) return <Text dimColor>loading profile…</Text>;
-  if (error) return <Text color="red">{error}</Text>;
-  if (!profile) return <Text dimColor>no extension selected</Text>;
+  if (loading) return <Loading label="loading profile…" />;
+  if (error)
+    return (
+      <Box flexDirection="column">
+        <ErrorLine message={error} />
+        <Text dimColor>press esc to go back to the explorer</Text>
+      </Box>
+    );
+  if (!profile) return <EmptyLine label="no extension selected" />;
+
+  const working =
+    report?.overallWorking === null ? "?" : report?.overallWorking ? "yes" : "no";
+  const interesting =
+    report?.isInteresting === null ? "?" : report?.isInteresting ? "yes" : "no";
 
   return (
     <Box flexDirection="column">
       <Text>
-        <Text color="green">{profile.name}</Text>
+        <Text color="green" bold>
+          {profile.name}
+        </Text>
         <Text dimColor> v{profile.version ?? "?"} · mv{profile.manifestVersion}</Text>
-        {profile.hasMv3 ? <Text color="green"> · has mv3 variant</Text> : <Text dimColor> · mv2 only</Text>}
+        {profile.hasMv3 ? (
+          <Text color="green"> · has mv3 variant</Text>
+        ) : (
+          <Text dimColor> · mv2 only</Text>
+        )}
       </Text>
       <Text>
         <Text dimColor>score </Text>
-        <Text bold color="cyan">{profile.score}</Text>
+        <Text bold color="cyan">
+          {profile.score}
+        </Text>
         <Text dimColor> · {profile.sizeBytes} bytes</Text>
         {profile.tags.length > 0 ? <Text dimColor>  {profile.tags.join(" ")}</Text> : null}
       </Text>
+      <Rule marginTop={1} />
 
-      <Box marginTop={1} flexDirection="column">
-        <Text bold underline>breakdown</Text>
-        <Breakdown breakdown={profile.breakdown} />
-      </Box>
+      <Section title="breakdown" />
+      <Breakdown breakdown={profile.breakdown} />
 
-      <Box marginTop={1} flexDirection="column">
-        <Text bold underline>manifest</Text>
-        <ManifestView manifest={profile.manifest} />
-      </Box>
+      <Section title="manifest" />
+      <ManifestView manifest={profile.manifest} />
 
-      <Box marginTop={1} flexDirection="column">
-        <Text bold underline>listeners ({profile.listeners.length})</Text>
-        {profile.listeners.length === 0 ? (
-          <Text dimColor>none detected</Text>
-        ) : (
-          profile.listeners.map((l, i) => (
+      <Section title="listeners" hint={`${profile.listeners.length} detected`} />
+      {profile.listeners.length === 0 ? (
+        <EmptyLine label="none detected" />
+      ) : (
+        <Box flexDirection="column">
+          {profile.listeners.map((l, i) => (
             <Text key={`${l.api}:${l.file}:${l.line}`}>
               <Text dimColor>{String(i + 1).padStart(2)}) </Text>
-              <Text>{l.api}</Text>
+              <Text bold={false}>{l.api}</Text>
               <Text dimColor> {l.file}:{l.line}</Text>
             </Text>
-          ))
-        )}
-      </Box>
+          ))}
+        </Box>
+      )}
 
-      <Box marginTop={1} flexDirection="column">
-        <Text bold underline>browsers</Text>
-        <BrowserRow label="mv2" state={mv2} />
-        <BrowserRow label="mv3" state={mv3} />
-        {state.prompt ? (
-          <Text color="yellow">
-            {state.prompt.message}. download Chrome for Testing into {BROWSER_DIR}? [y] yes [n] no
-          </Text>
-        ) : null}
-        {files ? (
+      <Section title="browsers" hint="launch a browser to test the extension live" />
+      <BrowserRow label="mv2" state={mv2} />
+      <BrowserRow label="mv3" state={mv3} />
+      {prompt ? (
+        <Box borderStyle="round" borderColor="yellow" paddingX={1} marginTop={1} flexDirection="column">
+          <Text color="yellow">{prompt.message}</Text>
           <Text dimColor>
-            mv2: {files.mv2}
-            {files.mv3 ? `\nmv3: ${files.mv3}` : ""}
+            download Chrome for Testing into {BROWSER_DIR}?  [y] yes  [n] no
           </Text>
-        ) : null}
-        <Text dimColor>b launch · x close · r report</Text>
-      </Box>
+        </Box>
+      ) : null}
+      {files ? (
+        <Box flexDirection="column" marginTop={1}>
+          <Text dimColor>files:</Text>
+          <Text dimColor>  mv2 {files.mv2}</Text>
+          {files.mv3 ? <Text dimColor>  mv3 {files.mv3}</Text> : null}
+        </Box>
+      ) : null}
+      <Text dimColor>  b launch · x close</Text>
 
-      <Box marginTop={1} flexDirection="column">
-        <Text bold underline>report</Text>
-        {report ? (
+      <Section title="report" />
+      {report ? (
+        <Box flexDirection="column">
           <Text>
             <Text color="green">saved</Text>
-            <Text dimColor> · tested={report.tested ? "yes" : "no"} working={report.overallWorking === null ? "?" : report.overallWorking ? "yes" : "no"}</Text>
-            <Text dimColor> · {report.notes ? `notes: ${report.notes}` : ""}</Text>
+            <Text dimColor>
+              {" "}
+              · tested {report.tested ? "yes" : "no"} · working {working} · interesting{" "}
+              {interesting}
+            </Text>
           </Text>
-        ) : (
-          <Text dimColor>no report yet</Text>
-        )}
+          {report.notes ? <Text dimColor>notes: {report.notes}</Text> : null}
+        </Box>
+      ) : (
+        <EmptyLine label="no report yet — press r to record one" />
+      )}
+
+      <Box flexDirection="column" marginTop={1}>
+        <Rule />
+        <Text dimColor>b launch · x close · r report · esc back · q quit</Text>
       </Box>
     </Box>
   );

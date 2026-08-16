@@ -1,7 +1,8 @@
 import React from "react";
-import { Text } from "ink";
+import { Box, Text } from "ink";
 import type { ConnectionStatus, Tab } from "../types.js";
 import type { TunnelStatus } from "../ssh.js";
+import { Rule } from "./ui.js";
 
 export function StatusBar({
   status,
@@ -19,13 +20,48 @@ export function StatusBar({
   tunnel?: TunnelStatus | null;
 }) {
   const color = status === "connected" ? "green" : status === "connecting" ? "yellow" : "red";
+  const segments = [];
+  segments.push(
+    <Text key="status" color={color}>
+      ● {status}
+    </Text>,
+  );
+  if (message) {
+    segments.push(
+      <Text key="message" dimColor>
+        {" "}
+        — {message}
+      </Text>,
+    );
+  }
+  if (sshLabel) {
+    segments.push(
+      <Text key="ssh" dimColor>
+        {"  ·  "}ssh {sshLabel}
+      </Text>,
+    );
+  }
+  if (tunnel && tunnel !== "up") {
+    segments.push(
+      <Text key="tunnel" dimColor>
+        {"  ·  "}tunnel {tunnel}
+      </Text>,
+    );
+  }
+  segments.push(
+    <Text key="tab" dimColor>
+      {"  ·  "}[{tab}]
+    </Text>,
+  );
+  segments.push(
+    <Text key="quit" dimColor>
+      {"  ·  "}q quit
+    </Text>,
+  );
   return (
-    <Text>
-      <Text color={color}>● {status}</Text>
-      {message ? <Text dimColor> — {message}</Text> : null}
-      {sshLabel ? <Text dimColor>  ssh: {sshLabel}</Text> : null}
-      {tunnel && tunnel !== "up" ? <Text dimColor>  tunnel {tunnel}</Text> : null}
-      <Text dimColor>  [{tab}]  q quit</Text>
-    </Text>
+    <Box flexDirection="column">
+      <Rule marginTop={1} />
+      <Text>{segments}</Text>
+    </Box>
   );
 }

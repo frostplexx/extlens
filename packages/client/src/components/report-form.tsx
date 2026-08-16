@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Box, Text, useInput } from "ink";
 import type { ReportDraftForm, TriState } from "../types.js";
+import { Cursor } from "./ui.js";
 
 /**
  * Manual test report form. Rows: tri-state booleans, a notes input, then one
@@ -97,13 +98,17 @@ export function ReportForm({
 
   return (
     <Box flexDirection="column" borderStyle="round" borderColor="blue" paddingX={1}>
-      <Text bold>manual test report</Text>
+      <Text>
+        <Text bold>manual test report</Text>
+        <Text dimColor> — {form.saving ? "saving…" : form.savedId ? `saved as ${form.savedId}` : "unsaved"}</Text>
+      </Text>
       <Box flexDirection="column" marginTop={1}>
         {BOOLEAN_KEYS.map((field, i) => {
           const focused = i === form.cursor;
           return (
             <Text key={field}>
-              <Text dimColor>{BOOLEAN_LABELS[field].padEnd(20)}</Text>
+              <Cursor selected={focused} />
+              <Text dimColor>{BOOLEAN_LABELS[field].padEnd(18)}</Text>
               <Text color={focused ? "cyan" : undefined} bold={focused}>
                 {triLabel(form[field]).padEnd(4)}
               </Text>
@@ -113,7 +118,8 @@ export function ReportForm({
         })}
 
         <Text>
-          <Text dimColor>{"notes".padEnd(20)}</Text>
+          <Cursor selected={form.cursor === NOTE_ROW_INDEX} />
+          <Text dimColor>{"notes".padEnd(18)}</Text>
           {form.notesFocused ? (
             <Text color="cyan">{notesDraft}▌</Text>
           ) : (
@@ -127,14 +133,21 @@ export function ReportForm({
         </Text>
       </Box>
 
+      <Box marginTop={1}>
+        <Text dimColor>{"─".repeat(28)}</Text>
+      </Box>
+
       <Box flexDirection="column" marginTop={1}>
-        <Text bold underline>listeners</Text>
+        <Text bold underline>
+          listeners
+        </Text>
         {listenerApis.map((l, i) => {
           const row = LISTENER_START + i;
           const status = form.listenerStatus[i] ?? "untested";
           const focused = row === form.cursor;
           return (
             <Text key={`${l.api}:${l.file}`}>
+              <Cursor selected={focused} />
               <Text dimColor>{String(i + 1).padStart(2)}) </Text>
               <Text>{l.api}</Text>
               <Text dimColor> {l.file}</Text>
@@ -153,7 +166,7 @@ export function ReportForm({
         ) : form.savedId ? (
           <Text color="green">saved as {form.savedId} — esc to close</Text>
         ) : (
-          <Text dimColor>s submit · esc cancel · ↑/↓ move · space/←/→ cycle</Text>
+          <Text dimColor>s submit · esc cancel · ↑/↓ move · space/←/→ cycle (− → yes → no)</Text>
         )}
         {form.error ? <Text color="red">  {form.error}</Text> : null}
       </Box>

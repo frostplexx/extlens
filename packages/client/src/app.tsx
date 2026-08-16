@@ -528,7 +528,8 @@ export function App({
   return (
     <Box flexDirection="column">
       {passwordPrompt ? (
-        <Box flexDirection="column" borderStyle="round" paddingX={1} marginBottom={1}>
+        <Box flexDirection="column" borderStyle="round" borderColor="yellow" paddingX={1} marginBottom={1}>
+          <Text bold>password required</Text>
           <Text>{passwordPrompt.message}</Text>
           <Text color="cyan">{"•".repeat(secret.length) || " "}</Text>
           <Text dimColor>enter to submit · esc to cancel</Text>

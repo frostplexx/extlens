@@ -2,6 +2,7 @@ import React from "react";
 import { Box, Text } from "ink";
 import type { ExtensionLight, ListStats } from "@extlens/protocol";
 import type { ExplorerState } from "../types.js";
+import { Cursor, EmptyLine, ErrorLine, Loading, Rule } from "./ui.js";
 
 const BAR = "█";
 const EMPTY = "░";
@@ -21,18 +22,19 @@ function LightRow({
   maxScore: number;
 }) {
   return (
-    <Text backgroundColor={selected ? "blue" : undefined}>
+    <Text>
+      <Cursor selected={selected} />
       <Text color="cyan">{scoreBar(light.score, maxScore)}</Text>
       <Text> {String(light.score).padStart(4)} </Text>
       <Text bold={selected}>{light.name}</Text>
-      <Text dimColor> v{light.version ?? "?"} mv{light.manifestVersion}</Text>
-      {light.hasMv3 ? <Text color="green"> mv3✓</Text> : null}
+      <Text dimColor> v{light.version ?? "?"} · mv{light.manifestVersion}</Text>
+      {light.hasMv3 ? <Text color="green"> · mv3✓</Text> : null}
       {light.tags.length > 0 ? <Text dimColor>  {light.tags.join(" ")}</Text> : null}
     </Text>
   );
 }
 
-function StatsHeader({ stats }: { stats: ListStats }) {
+function StatsLine({ stats }: { stats: ListStats }) {
   return (
     <Text>
       <Text bold>{stats.total}</Text>
@@ -66,32 +68,42 @@ export function Explorer({ state }: { state: ExplorerState }) {
 
   return (
     <Box flexDirection="column">
-      <Box>
-        <Text>
-          <Text color="green">extlens</Text>
-          <Text dimColor> — explorer</Text>
+      <Text>
+        <Text color="green" bold>
+          extlens
         </Text>
-        <Text>  </Text>
+        <Text dimColor> — extension explorer</Text>
+      </Text>
+      <Text dimColor>
         {searchFocused ? (
-          <Text>search: <Text color="cyan">{search}</Text>▌</Text>
-        ) : search ? (
-          <Text dimColor>search: {search}</Text>
+          <>
+            search <Text color="cyan">{search}▌</Text>
+            <Text dimColor>  (enter or esc to close)</Text>
+          </>
         ) : (
-          <Text dimColor>press / to search</Text>
+          <>
+            search <Text color={search ? "cyan" : undefined}>{search || "off"}</Text>
+            <Text dimColor> (/) · sort </Text>
+            <Text color="cyan">{sortLabel}</Text>
+            <Text dimColor> (s) · page </Text>
+            <Text color="cyan">
+              {page}/{totalPages}
+            </Text>
+          </>
         )}
-        <Text>  </Text>
-        <Text dimColor>sort: {sortLabel} (s)</Text>
-      </Box>
+      </Text>
 
-      {stats ? <StatsHeader stats={stats} /> : <Text dimColor>connecting…</Text>}
+      <Rule marginTop={1} />
+
+      {stats ? <StatsLine stats={stats} /> : <Loading label="connecting…" />}
 
       <Box flexDirection="column" marginTop={1}>
         {error ? (
-          <Text color="red">{error}</Text>
+          <ErrorLine message={error} />
         ) : loading ? (
-          <Text dimColor>{lights.length === 0 ? "loading…" : "refreshing…"}</Text>
+          <Loading label={lights.length === 0 ? "loading…" : "refreshing…"} />
         ) : lights.length === 0 ? (
-          <Text dimColor>no extensions match</Text>
+          <EmptyLine label={search ? "no extensions match the search" : "no extensions yet"} />
         ) : (
           lights.map((light, i) => (
             <LightRow
@@ -104,10 +116,9 @@ export function Explorer({ state }: { state: ExplorerState }) {
         )}
       </Box>
 
-      <Box marginTop={1}>
-        <Text dimColor>
-          page {page}/{totalPages} (n next, p prev) · ↑/↓ select · enter open · q quit
-        </Text>
+      <Box flexDirection="column" marginTop={1}>
+        <Rule />
+        <Text dimColor>↑/↓ select · enter open · / search · s sort · n/p page · q quit</Text>
       </Box>
     </Box>
   );
