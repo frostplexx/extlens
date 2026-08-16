@@ -1,11 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { render } from "ink";
+import { render, Text } from "ink";
 import { PassThrough } from "node:stream";
 import React from "react";
 import type { ExtensionLight, ListStats } from "@extlens/protocol";
 import { Explorer } from "../src/components/explorer.js";
 import { Analyzer } from "../src/components/analyzer.js";
 import { StatusBar } from "../src/components/status-bar.js";
+import { TopBar } from "../src/components/ui.js";
 import type { AnalyzerState, ExplorerState } from "../src/types.js";
 
 /**
@@ -85,25 +86,23 @@ const analyzerState: AnalyzerState = {
 };
 
 describe("ui rendering", () => {
-  it("renders the explorer with toolbar and rows", async () => {
-    const out = await capture(React.createElement(Explorer, { state: explorerState({}) }));
-    expect(out).toContain("extension explorer");
-    expect(out).toContain("search off");
-    expect(out).toContain("score↓");
-    expect(out).toContain("page 1/3");
-    expect(out).toContain("sample-extension");
-    expect(out).toContain("▸");
-    expect(out).toContain("enter open");
-  });
-
-  it("renders the explorer search focus state", async () => {
+  it("renders the top bar with title and right controls", async () => {
     const out = await capture(
-      React.createElement(Explorer, {
-        state: explorerState({ search: "sto", searchFocused: true }),
+      React.createElement(TopBar, {
+        title: "extension explorer",
+        right: React.createElement(Text, null, "search off (/)"),
       }),
     );
-    expect(out).toContain("sto▌");
-    expect(out).toContain("enter or esc to close");
+    expect(out).toContain("extlens — extension explorer");
+    expect(out).toContain("search off (/)");
+  });
+
+  it("renders explorer rows without tags", async () => {
+    const out = await capture(React.createElement(Explorer, { state: explorerState({}) }));
+    expect(out).toContain("sample-extension");
+    expect(out).toContain("▸");
+    expect(out).not.toContain("enter open");
+    expect(out).not.toContain("tag-a");
   });
 
   it("renders analyzer sections and browser rows", async () => {
@@ -113,10 +112,10 @@ describe("ui rendering", () => {
     expect(out).toContain("listeners");
     expect(out).toContain("chrome.runtime.onMessage");
     expect(out).toContain("mv2 loaded");
-    expect(out).toContain("b launch");
+    expect(out).not.toContain("b launch");
   });
 
-  it("renders the status bar with ssh label", async () => {
+  it("renders the status bar with ssh label and hints", async () => {
     const out = await capture(
       React.createElement(StatusBar, {
         status: "connected",
@@ -124,10 +123,12 @@ describe("ui rendering", () => {
         tab: "explorer",
         sshLabel: "myserver",
         tunnel: "up",
+        hints: "↑/↓ select · enter open · q quit",
       }),
     );
     expect(out).toContain("● connected");
     expect(out).toContain("ssh myserver");
     expect(out).toContain("[explorer]");
+    expect(out).toContain("↑/↓ select · enter open · q quit");
   });
 });

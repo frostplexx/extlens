@@ -172,7 +172,6 @@ export function Analyzer({ state }: { state: AnalyzerState }) {
           {files.mv3 ? <Text dimColor>  mv3 {files.mv3}</Text> : null}
         </Box>
       ) : null}
-      <Text dimColor>  b launch · x close</Text>
 
       <Section title="report" />
       {report ? (
@@ -190,11 +189,6 @@ export function Analyzer({ state }: { state: AnalyzerState }) {
       ) : (
         <EmptyLine label="no report yet — press r to record one" />
       )}
-
-      <Box flexDirection="column" marginTop={1}>
-        <Rule />
-        <Text dimColor>b launch · x close · r report · esc back · q quit</Text>
-      </Box>
     </Box>
   );
 }

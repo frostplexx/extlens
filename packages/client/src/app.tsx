@@ -23,6 +23,7 @@ import { Analyzer } from "./components/analyzer.js";
 import { Explorer } from "./components/explorer.js";
 import { ReportForm, BOOLEAN_KEYS, LISTENER_START } from "./components/report-form.js";
 import { StatusBar } from "./components/status-bar.js";
+import { TopBar } from "./components/ui.js";
 import type {
   AnalyzerState,
   ConnectionStatus,
@@ -33,6 +34,12 @@ import type {
 } from "./types.js";
 
 const SORTS: SortOrder[] = ["interestingness_desc", "interestingness_asc", "name"];
+
+const SORT_LABELS: Record<SortOrder, string> = {
+  interestingness_desc: "score↓",
+  interestingness_asc: "score↑",
+  name: "name",
+};
 
 const IDLE_BROWSER = { phase: "idle" as const, message: null, extensionId: null };
 
@@ -525,6 +532,13 @@ export function App({
     }
   });
 
+  const hints =
+    tab === "explorer"
+      ? "↑/↓ select · enter open · / search · s sort · n/p page · q quit"
+      : analyzer.formOpen || analyzer.error || !analyzer.profile
+        ? ""
+        : "b launch · x close · r report · esc back · q quit";
+
   return (
     <Box flexDirection="column">
       {passwordPrompt ? (
@@ -535,6 +549,27 @@ export function App({
           <Text dimColor>enter to submit · esc to cancel</Text>
         </Box>
       ) : null}
+      <TopBar
+        title={`extension ${tab}`}
+        right={
+          tab === "explorer" ? (
+            explorer.searchFocused ? (
+              <>
+                search <Text color="cyan">{explorer.search}▌</Text>
+                <Text dimColor>  (enter or esc to close)</Text>
+              </>
+            ) : (
+              <>
+                search <Text color={explorer.search ? "cyan" : undefined}>{explorer.search || "off"}</Text>
+                <Text dimColor> (/) · sort </Text>
+                <Text color="cyan">{SORT_LABELS[explorer.sort]}</Text>
+                <Text dimColor> (s) · page </Text>
+                <Text color="cyan">{explorer.page}/{explorer.totalPages}</Text>
+              </>
+            )
+          ) : null
+        }
+      />
       {tab === "explorer" ? <Explorer state={explorer} /> : <Analyzer state={analyzer} />}
       {tab === "analyzer" && analyzer.formOpen && form ? (
         <ReportForm
@@ -554,6 +589,7 @@ export function App({
         tab={tab}
         sshLabel={sshMode ? (sshSpec?.destination ?? null) : null}
         tunnel={sshMode ? tunnel : null}
+        hints={hints}
       />
     </Box>
   );

@@ -2,7 +2,7 @@ import React from "react";
 import { Box, Text } from "ink";
 import type { ExtensionLight, ListStats } from "@extlens/protocol";
 import type { ExplorerState } from "../types.js";
-import { Cursor, EmptyLine, ErrorLine, Loading, Rule } from "./ui.js";
+import { Cursor, EmptyLine, ErrorLine, Loading } from "./ui.js";
 
 const BAR = "█";
 const EMPTY = "░";
@@ -29,7 +29,6 @@ function LightRow({
       <Text bold={selected}>{light.name}</Text>
       <Text dimColor> v{light.version ?? "?"} · mv{light.manifestVersion}</Text>
       {light.hasMv3 ? <Text color="green"> · mv3✓</Text> : null}
-      {light.tags.length > 0 ? <Text dimColor>  {light.tags.join(" ")}</Text> : null}
     </Text>
   );
 }
@@ -49,52 +48,12 @@ function StatsLine({ stats }: { stats: ListStats }) {
 }
 
 export function Explorer({ state }: { state: ExplorerState }) {
-  const {
-    lights,
-    stats,
-    sort,
-    search,
-    searchFocused,
-    page,
-    totalPages,
-    selectedIndex,
-    loading,
-    error,
-  } = state;
+  const { lights, stats, search, selectedIndex, loading, error } = state;
 
   const maxScore = Math.max(1, ...lights.map((l) => l.score));
-  const sortLabel =
-    sort === "interestingness_desc" ? "score↓" : sort === "interestingness_asc" ? "score↑" : "name";
 
   return (
     <Box flexDirection="column">
-      <Text>
-        <Text color="green" bold>
-          extlens
-        </Text>
-        <Text dimColor> — extension explorer</Text>
-      </Text>
-      <Text dimColor>
-        {searchFocused ? (
-          <>
-            search <Text color="cyan">{search}▌</Text>
-            <Text dimColor>  (enter or esc to close)</Text>
-          </>
-        ) : (
-          <>
-            search <Text color={search ? "cyan" : undefined}>{search || "off"}</Text>
-            <Text dimColor> (/) · sort </Text>
-            <Text color="cyan">{sortLabel}</Text>
-            <Text dimColor> (s) · page </Text>
-            <Text color="cyan">
-              {page}/{totalPages}
-            </Text>
-          </>
-        )}
-      </Text>
-
-      <Rule marginTop={1} />
-
       {stats ? <StatsLine stats={stats} /> : <Loading label="connecting…" />}
 
       <Box flexDirection="column" marginTop={1}>
@@ -114,11 +73,6 @@ export function Explorer({ state }: { state: ExplorerState }) {
             />
           ))
         )}
-      </Box>
-
-      <Box flexDirection="column" marginTop={1}>
-        <Rule />
-        <Text dimColor>↑/↓ select · enter open · / search · s sort · n/p page · q quit</Text>
       </Box>
     </Box>
   );

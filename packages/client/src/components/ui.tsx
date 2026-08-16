@@ -43,6 +43,30 @@ export function Section({
   );
 }
 
+/** App header: brand + title on the left, contextual controls on the right. */
+export function TopBar({
+  title,
+  right = null,
+}: {
+  title: string;
+  right?: React.ReactNode;
+}) {
+  return (
+    <Box flexDirection="column">
+      <Box justifyContent="space-between">
+        <Text>
+          <Text color="green" bold>
+            extlens
+          </Text>
+          <Text dimColor> — {title}</Text>
+        </Text>
+        {right ? <Text dimColor>{right}</Text> : null}
+      </Box>
+      <Rule marginTop={1} />
+    </Box>
+  );
+}
+
 /** Row marker: ▸ for the selected row, blank space otherwise. */
 export function Cursor({ selected }: { selected: boolean }) {
   return <Text color="cyan">{selected ? "▸ " : "  "}</Text>;

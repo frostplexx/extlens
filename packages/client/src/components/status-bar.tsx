@@ -10,6 +10,7 @@ export function StatusBar({
   tab,
   sshLabel = null,
   tunnel = null,
+  hints = "",
 }: {
   status: ConnectionStatus;
   message: string | null;
@@ -18,6 +19,8 @@ export function StatusBar({
   sshLabel?: string | null;
   /** Tunnel state in ssh mode, or null for a local host. */
   tunnel?: TunnelStatus | null;
+  /** Contextual key hints for the active tab, or "" for none. */
+  hints?: string;
 }) {
   const color = status === "connected" ? "green" : status === "connecting" ? "yellow" : "red";
   const segments = [];
@@ -53,15 +56,13 @@ export function StatusBar({
       {"  ·  "}[{tab}]
     </Text>,
   );
-  segments.push(
-    <Text key="quit" dimColor>
-      {"  ·  "}q quit
-    </Text>,
-  );
   return (
     <Box flexDirection="column">
       <Rule marginTop={1} />
-      <Text>{segments}</Text>
+      <Box justifyContent="space-between">
+        <Text>{segments}</Text>
+        {hints ? <Text dimColor>{hints}</Text> : null}
+      </Box>
     </Box>
   );
 }
