@@ -25,9 +25,18 @@ function LightRow({
     <Text>
       <Cursor selected={selected} />
       <Text color="cyan">{scoreBar(light.score, maxScore)}</Text>
-      <Text> {String(light.score).padStart(4)} </Text>
-      <Text bold={selected}>{light.name}</Text>
-      <Text dimColor> v{light.version ?? "?"} · mv{light.manifestVersion}</Text>
+      <Text color={selected ? "cyan" : undefined} bold={selected}>
+        {" "}
+        {String(light.score).padStart(4)}
+      </Text>
+      <Text color={selected ? "cyan" : undefined} bold={selected}>
+        {" "}
+        {light.name}
+      </Text>
+      <Text color={selected ? "cyan" : undefined}>
+        {" "}
+        v{light.version ?? "?"} · mv{light.manifestVersion}
+      </Text>
       {light.hasMv3 ? <Text color="green"> · mv3✓</Text> : null}
     </Text>
   );
