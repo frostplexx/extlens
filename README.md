@@ -99,7 +99,10 @@ A password prompt appears in the terminal before the TUI starts. Key auth
 needs no prompt. One control master serves the tunnel and the file downloads,
 so nothing re-prompts mid-session. The client tears the master down on quit.
 
-If the tunnel drops, quit the client and start it again.
+If the tunnel drops, the client reconnects automatically. Key auth reconnects
+silently. Password auth re-prompts for the password. The client re-establishes
+the forward on the same port, so the WebSocket client reconnects against one
+URL. Quit the client to stop the retry loop.
 
 ## Repo layout
 
