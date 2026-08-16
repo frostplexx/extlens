@@ -4,29 +4,11 @@ import type { ExtensionLight, ListStats } from "@extlens/protocol";
 import type { ExplorerState } from "../types.js";
 import { Cursor, EmptyLine, ErrorLine, Loading } from "./ui.js";
 
-const BAR = "█";
-const EMPTY = "░";
-
-function scoreBar(score: number, maxScore: number): string {
-  const filled = Math.round((score / maxScore) * 10);
-  return BAR.repeat(filled) + EMPTY.repeat(10 - filled);
-}
-
-function LightRow({
-  light,
-  selected,
-  maxScore,
-}: {
-  light: ExtensionLight;
-  selected: boolean;
-  maxScore: number;
-}) {
+function LightRow({ light, selected }: { light: ExtensionLight; selected: boolean }) {
   return (
     <Text>
       <Cursor selected={selected} />
-      <Text color="cyan">{scoreBar(light.score, maxScore)}</Text>
       <Text color={selected ? "cyan" : undefined} bold={selected}>
-        {" "}
         {String(light.score).padStart(4)}
       </Text>
       <Text color={selected ? "cyan" : undefined} bold={selected}>
@@ -59,8 +41,6 @@ function StatsLine({ stats }: { stats: ListStats }) {
 export function Explorer({ state }: { state: ExplorerState }) {
   const { lights, stats, search, selectedIndex, loading, error } = state;
 
-  const maxScore = Math.max(1, ...lights.map((l) => l.score));
-
   return (
     <Box flexDirection="column">
       {stats ? <StatsLine stats={stats} /> : <Loading label="connecting…" />}
@@ -74,12 +54,7 @@ export function Explorer({ state }: { state: ExplorerState }) {
           <EmptyLine label={search ? "no extensions match the search" : "no extensions yet"} />
         ) : (
           lights.map((light, i) => (
-            <LightRow
-              key={light.id}
-              light={light}
-              selected={i === selectedIndex}
-              maxScore={maxScore}
-            />
+            <LightRow key={light.id} light={light} selected={i === selectedIndex} />
           ))
         )}
       </Box>
