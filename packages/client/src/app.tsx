@@ -11,6 +11,8 @@ import type {
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ExtlensClient } from "./api.js";
+import { createSshManager } from "./ssh.js";
+import type { SshManager, SshSpec, TunnelStatus } from "./ssh.js";
 import {
   BROWSER_DIR,
   installChrome,
@@ -29,7 +31,6 @@ import type {
   Tab,
   TriState,
 } from "./types.js";
-import type { SshSession } from "./ssh.js";
 
 const SORTS: SortOrder[] = ["interestingness_desc", "interestingness_asc", "name"];
 
@@ -43,13 +44,13 @@ function fileRefToPath(ref: string): string {
 
 export function App({
   wsUrl,
-  ssh = null,
+  sshSpec = null,
 }: {
   wsUrl: string;
-  /** Active ssh session; null in local mode. Remote file refs download into
-   *  a local cache before browser launch. */
-  ssh?: SshSession | null;
+  /** ssh destination when the host is remote; null in local mode. */
+  sshSpec?: SshSpec | null;
 }) {
+  const sshMode = sshSpec !== null;
   const { exit } = useApp();
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -79,24 +80,75 @@ export function App({
     prompt: null,
   });
   const [form, setForm] = useState<ReportDraftForm | null>(null);
-
-  const clientRef = useRef<ExtlensClient | null>(null);
-  if (!clientRef.current) {
-    clientRef.current = new ExtlensClient(wsUrl, (next, message) => {
-      setStatus(next);
-      setStatusMessage(message ?? null);
-    });
-  }
-  const client = clientRef.current;
+  const [tunnel, setTunnel] = useState<TunnelStatus>(sshMode ? "connecting" : "up");
+  const [passwordPrompt, setPasswordPrompt] = useState<{
+    message: string;
+    resolve: (secret: string) => void;
+  } | null>(null);
+  const [secret, setSecret] = useState("");
+  const managerRef = useRef<SshManager | null>(null);
   const browsersRef = useRef(new BrowserManager());
 
+  const handleClientStatus = useCallback(
+    (next: ConnectionStatus, message?: string) => {
+      setStatus(next);
+      setStatusMessage(message ?? null);
+      // A dropped connection may mean the tunnel died. Probe it now instead
+      // of waiting for the next health check.
+      if (sshMode && next === "disconnected") managerRef.current?.checkNow();
+    },
+    [sshMode],
+  );
+
+  const requestSecret = useCallback((): Promise<string> => {
+    return new Promise((resolve) => {
+      setPasswordPrompt({ message: `password for ${sshSpec?.destination}:`, resolve });
+    });
+  }, [sshSpec]);
+
+  if (sshMode && !managerRef.current) {
+    managerRef.current = createSshManager({
+      spec: sshSpec as SshSpec,
+      getSecret: requestSecret,
+      onStatus: (next, message) => {
+        setTunnel(next);
+        if (next === "failed" && message) setStatusMessage(message);
+      },
+    });
+  }
+
+  // Local mode: the client exists from the start. SSH mode: it is created
+  // once the tunnel is up, against the tunnel's fixed local port, so it
+  // reconnects on its own across tunnel restarts.
+  const [client, setClient] = useState<ExtlensClient | null>(() =>
+    sshMode ? null : new ExtlensClient(wsUrl, handleClientStatus),
+  );
+
   useEffect(() => {
+    if (!client) return;
     client.start();
     return () => {
       client.stop();
       void browsersRef.current.closeAll();
     };
   }, [client]);
+
+  useEffect(() => {
+    if (!sshMode) return;
+    managerRef.current?.start();
+    const onExit = () => managerRef.current?.stop();
+    process.on("exit", onExit);
+    return () => {
+      process.off("exit", onExit);
+      managerRef.current?.stop();
+    };
+  }, [sshMode]);
+
+  useEffect(() => {
+    if (!sshMode || tunnel !== "up" || client) return;
+    const port = managerRef.current?.localPort;
+    if (port) setClient(new ExtlensClient(`ws://127.0.0.1:${port}`, handleClientStatus));
+  }, [sshMode, tunnel, client, handleClientStatus]);
 
   // Explorer fetch: runs when the connection becomes available or when
   // page / search / sort change. Without the status dependency, a connect
@@ -149,11 +201,13 @@ export function App({
           client.call<{ report: Report | null }>("reports.get", { extensionId: id }),
         ]);
         let fileRefs = files.files;
-        if (ssh) {
+        if (sshMode) {
+          const session = managerRef.current?.session;
+          if (!session) throw new Error("tunnel not up");
           const resolved: FileRefs = {};
           for (const label of ["mv2", "mv3"] as const) {
             const ref = files.files[label];
-            if (ref) resolved[label] = await ssh.downloadRef(label, id, ref);
+            if (ref) resolved[label] = await session.downloadRef(label, id, ref);
           }
           fileRefs = resolved;
         }
@@ -168,7 +222,7 @@ export function App({
         );
       }
     },
-    [client, ssh],
+    [client, sshMode],
   );
 
   const openAnalyzer = useCallback(() => {
@@ -369,6 +423,22 @@ export function App({
   }, [form, analyzer.id, analyzer.profile, client, loadProfile]);
 
   useInput((input, key) => {
+    if (passwordPrompt) {
+      if (key.escape) {
+        passwordPrompt.resolve("");
+        setPasswordPrompt(null);
+        setSecret("");
+      } else if (key.return) {
+        passwordPrompt.resolve(secret);
+        setPasswordPrompt(null);
+        setSecret("");
+      } else if (key.backspace || key.delete) {
+        setSecret((s) => s.slice(0, -1));
+      } else if (input && !key.ctrl && !key.meta) {
+        setSecret((s) => s + input);
+      }
+      return;
+    }
     if (tab === "analyzer" && analyzer.formOpen) return; // report form owns keys
 
     const prompt = analyzer.prompt;
@@ -457,6 +527,13 @@ export function App({
 
   return (
     <Box flexDirection="column">
+      {passwordPrompt ? (
+        <Box flexDirection="column" borderStyle="round" paddingX={1} marginBottom={1}>
+          <Text>{passwordPrompt.message}</Text>
+          <Text color="cyan">{"•".repeat(secret.length) || " "}</Text>
+          <Text dimColor>enter to submit · esc to cancel</Text>
+        </Box>
+      ) : null}
       {tab === "explorer" ? <Explorer state={explorer} /> : <Analyzer state={analyzer} />}
       {tab === "analyzer" && analyzer.formOpen && form ? (
         <ReportForm
@@ -474,7 +551,8 @@ export function App({
         status={status}
         message={statusMessage}
         tab={tab}
-        sshLabel={ssh ? ssh.destination : null}
+        sshLabel={sshMode ? (sshSpec?.destination ?? null) : null}
+        tunnel={sshMode ? tunnel : null}
       />
     </Box>
   );

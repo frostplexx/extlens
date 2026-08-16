@@ -2,14 +2,21 @@
 // Fake ssh for integration tests. Emulates the OpenSSH surface the client
 // uses, without any real server:
 //   - the tunnel case (-L ...) spawns a detached TCP forwarder and exits 0,
-//     like `ssh -f -N -M`
+//     like `ssh -f -N -M`; it touches the control socket first, like a real
+//     master would
+//   - FAKE_SSH_KEY_AUTH=fail makes key auth fail with "Permission denied",
+//     like a server that only accepts passwords
+//   - the password flow (SSH_ASKPASS_REQUIRE=force) runs the askpass script
+//     and compares its output to FAKE_SSH_EXPECTED_PASSWORD
 //   - the download case runs the trailing remote command through /bin/sh
 //     locally, like a shell on the remote
 //   - the close case (-O exit) exits 0
-// The forwarder watches CONTROL_PATH and exits when the client removes it.
-import { spawn } from "node:child_process";
+// The forwarder exits when the control socket disappears (client teardown)
+// or when the KILL_FILE appears (simulated tunnel death). See forward.mjs.
+import { spawn, execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { writeFileSync } from "node:fs";
 
 const args = process.argv.slice(2);
 
@@ -17,12 +24,43 @@ if (args.includes("-O") && args.includes("exit")) {
   process.exit(0);
 }
 
+// Password flow: the manager sets SSH_ASKPASS_REQUIRE=force on this process.
+if (process.env.SSH_ASKPASS_REQUIRE === "force") {
+  const script = process.env.SSH_ASKPASS;
+  let secret = "";
+  try {
+    secret = execFileSync(script, [], { encoding: "utf8" }).trim();
+  } catch {
+    /* the askpass script is gone; fail below */
+  }
+  if (secret !== process.env.FAKE_SSH_EXPECTED_PASSWORD) {
+    process.stderr.write("fake: Permission denied, please try again.\n");
+    process.exit(255);
+  }
+  startForwarder();
+  process.exit(0);
+}
+
 const listen = args.indexOf("-L");
 if (listen !== -1) {
-  const spec = args[listen + 1];
+  if (process.env.FAKE_SSH_KEY_AUTH === "fail") {
+    process.stderr.write("fake: Permission denied (publickey).\n");
+    process.exit(255);
+  }
+  startForwarder();
+  process.exit(0);
+}
+
+const remoteCommand = args[args.length - 1];
+const child = spawn("/bin/sh", ["-c", remoteCommand], { stdio: "inherit" });
+child.on("exit", (code) => process.exit(code ?? 1));
+
+function startForwarder() {
+  const spec = args[args.indexOf("-L") + 1];
   const [, localPort, , remotePort] = spec.split(":");
   const controlArg = args.find((a) => a.startsWith("ControlPath="));
   const controlPath = controlArg.slice("ControlPath=".length);
+  writeFileSync(controlPath, ""); // like a real master creating its socket
   const here = dirname(fileURLToPath(import.meta.url));
   const forwarder = spawn(
     process.execPath,
@@ -30,9 +68,4 @@ if (listen !== -1) {
     { stdio: "ignore", detached: true },
   );
   forwarder.unref();
-  process.exit(0);
 }
-
-const remoteCommand = args[args.length - 1];
-const child = spawn("/bin/sh", ["-c", remoteCommand], { stdio: "inherit" });
-child.on("exit", (code) => process.exit(code ?? 1));
