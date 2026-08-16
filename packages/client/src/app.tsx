@@ -3,6 +3,7 @@ import { Box, Text, useApp, useInput, useStdout } from "ink";
 import type {
   ExtensionProfile,
   FileRefs,
+  HostStatus,
   ListResult,
   Report,
   ReportDraft,
@@ -23,7 +24,7 @@ import { Analyzer } from "./components/analyzer.js";
 import { Explorer } from "./components/explorer.js";
 import { ReportForm, BOOLEAN_KEYS, LISTENER_START } from "./components/report-form.js";
 import { StatusBar } from "./components/status-bar.js";
-import { TopBar, listPageSize } from "./components/ui.js";
+import { HostStatusView, TopBar, listPageSize } from "./components/ui.js";
 import type {
   AnalyzerState,
   ConnectionStatus,
@@ -98,6 +99,17 @@ export function App({
     const timer = setTimeout(() => setDebouncedSearch(explorer.search), 300);
     return () => clearTimeout(timer);
   }, [explorer.search]);
+  // Host lifecycle: current status, whether the host supports it, and any
+  // start/stop error. `supported` goes false when host.status fails (e.g.
+  // a host without a HostController) so the top bar hides the segment.
+  const [host, setHost] = useState<{
+    status: HostStatus | null;
+    supported: boolean;
+    error: string | null;
+  }>({ status: null, supported: true, error: null });
+  // Bumped to refetch the list when a host job finishes or stops: the
+  // corpus may have changed (a new run row appears).
+  const [refreshKey, setRefreshKey] = useState(0);
   const [passwordPrompt, setPasswordPrompt] = useState<{
     message: string;
     resolve: (secret: string) => void;
@@ -167,12 +179,70 @@ export function App({
     if (port) setClient(new ExtlensClient(`ws://127.0.0.1:${port}`, handleClientStatus));
   }, [sshMode, tunnel, client, handleClientStatus]);
 
+  // Host status: fetch once per connect. Failure means the host has no
+  // HostController; stop showing the segment rather than erroring.
+  useEffect(() => {
+    if (!client || status !== "connected") return;
+    let cancelled = false;
+    void client
+      .call<{ status: HostStatus }>("host.status")
+      .then((r) => {
+        if (!cancelled) setHost((h) => ({ ...h, status: r.status, supported: true }));
+      })
+      .catch(() => {
+        if (!cancelled) setHost((h) => ({ ...h, status: null, supported: false }));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, status]);
+
+  // Poll host.status while a job runs; refetch the list when it ends.
+  useEffect(() => {
+    if (!client || status !== "connected") return;
+    const st = host.status;
+    if (!st || (st.state !== "running" && st.state !== "stopping")) return;
+    const timer = setInterval(() => {
+      void client
+        .call<{ status: HostStatus }>("host.status")
+        .then((r) => {
+          setHost((h) => ({ ...h, status: r.status }));
+          if (r.status.state === "idle") setRefreshKey((k) => k + 1);
+        })
+        .catch((error: Error) => setHost((h) => ({ ...h, error: error.message })));
+    }, 1500);
+    return () => clearInterval(timer);
+  }, [client, status, host.status?.state]);
+
+  const toggleHost = useCallback(() => {
+    if (!client || status !== "connected") return;
+    const st = host.status;
+    if (st && (st.state === "running" || st.state === "stopping")) {
+      void client
+        .call<{ status: HostStatus }>("host.stop")
+        .then((r) => {
+          setHost((h) => ({ ...h, status: r.status, error: null }));
+          setRefreshKey((k) => k + 1);
+        })
+        .catch((error: Error) => setHost((h) => ({ ...h, error: error.message })));
+      return;
+    }
+    const light = explorer.lights[explorer.selectedIndex];
+    if (!light) return;
+    void client
+      .call<{ status: HostStatus }>("host.start", { id: light.id })
+      .then((r) => {
+        setHost((h) => ({ ...h, status: r.status, error: null }));
+      })
+      .catch((error: Error) => setHost((h) => ({ ...h, error: error.message })));
+  }, [client, status, host.status, explorer.lights, explorer.selectedIndex]);
+
   // Explorer fetch: runs when the connection becomes available or when
-  // page / search / sort change. Without the status dependency, a connect
-  // that happens after the initial (failed) fetch would never retry.
+  // page / search / sort / refreshKey change. Without the status dependency,
+  // a connect that happens after the initial (failed) fetch would never retry.
   useEffect(() => {
     let cancelled = false;
-    if (status !== "connected") {
+    if (!client || status !== "connected") {
       setExplorer((e) => ({
         ...e,
         loading: status === "connecting",
@@ -214,6 +284,7 @@ export function App({
 
   const loadProfile = useCallback(
     async (id: string) => {
+      if (!client) return;
       try {
         const [get, files, report] = await Promise.all([
           client.call<{ extension: ExtensionProfile }>("extensions.get", { id }),
@@ -411,7 +482,7 @@ export function App({
   const submitForm = useCallback(() => {
     const f = form;
     const id = analyzer.id;
-    if (!f || !id || f.saving) return;
+    if (!f || !id || f.saving || !client) return;
     setForm((x) => (x ? { ...x, saving: true, error: null } : x));
     const draft: ReportDraft = {
       extensionId: id,

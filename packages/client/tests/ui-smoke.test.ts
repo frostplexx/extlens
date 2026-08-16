@@ -6,7 +6,7 @@ import type { ExtensionLight, ListStats } from "@extlens/protocol";
 import { Explorer } from "../src/components/explorer.js";
 import { Analyzer } from "../src/components/analyzer.js";
 import { StatusBar } from "../src/components/status-bar.js";
-import { TopBar, listPageSize } from "../src/components/ui.js";
+import { TopBar, HostStatusView, listPageSize } from "../src/components/ui.js";
 import type { AnalyzerState, ExplorerState } from "../src/types.js";
 
 /**
@@ -102,6 +102,25 @@ describe("ui rendering", () => {
     );
     expect(out).toContain("extlens — extension explorer");
     expect(out).toContain("search off (/)");
+  });
+
+  it("renders host lifecycle states", async () => {
+    const view = (status: any) =>
+      capture(React.createElement(HostStatusView, { status }));
+    expect(await view({ state: "idle", phase: null, extensionId: null, startedAt: null, message: null })).toContain("idle");
+    expect(
+      await view({ state: "running", phase: "preparing", extensionId: "one-ext", startedAt: "t", message: null }),
+    ).toContain("running one-ext");
+    expect(
+      await view({ state: "running", phase: "migrating", extensionId: "one-ext", startedAt: "t", message: null }),
+    ).toContain("migrating");
+    expect(
+      await view({ state: "idle", phase: "done", extensionId: "one-ext", startedAt: "t", message: null }),
+    ).toContain("done one-ext");
+    expect(
+      await view({ state: "idle", phase: "failed", extensionId: "one-ext", startedAt: "t", message: null }),
+    ).toContain("failed one-ext");
+    expect(await view(null)).toContain("host …");
   });
 
   it("renders explorer rows without tags", async () => {

@@ -1,5 +1,6 @@
 import React from "react";
 import { Box, Text, useStdout } from "ink";
+import type { HostStatus } from "@extlens/protocol";
 
 const RULE = "─";
 
@@ -90,4 +91,59 @@ export function EmptyLine({ label }: { label: string }) {
 /** Distinct loading line. */
 export function Loading({ label = "loading…" }: { label?: string }) {
   return <Text dimColor>{label}</Text>;
+}
+
+/** Host lifecycle state for the top bar: running/stopping phases, terminal state. */
+export function HostStatusView({
+  status,
+  error = null,
+}: {
+  status: HostStatus | null;
+  error?: string | null;
+}) {
+  if (error) {
+    return (
+      <Text color="red">
+        host error: {error}
+      </Text>
+    );
+  }
+  if (!status) return <Text dimColor>host …</Text>;
+  const { state, phase, extensionId } = status;
+  if (state === "running") {
+    return (
+      <Text>
+        <Text color="yellow">running {extensionId}</Text>
+        {phase ? <Text dimColor> ({phase})</Text> : null}
+      </Text>
+    );
+  }
+  if (state === "stopping") {
+    return <Text color="yellow">stopping {extensionId}</Text>;
+  }
+  if (phase === "done") {
+    return (
+      <Text>
+        <Text color="green">done</Text>
+        <Text dimColor> {extensionId}</Text>
+      </Text>
+    );
+  }
+  if (phase === "failed") {
+    return (
+      <Text>
+        <Text color="red">failed</Text>
+        <Text dimColor> {extensionId}</Text>
+      </Text>
+    );
+  }
+  if (phase === "stopped") {
+    return (
+      <Text>
+        <Text color="yellow">stopped</Text>
+        <Text dimColor> {extensionId}</Text>
+      </Text>
+    );
+  }
+  return <Text dimColor>idle</Text>;
 }
