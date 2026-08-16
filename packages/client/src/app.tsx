@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Box, Text, useApp, useInput } from "ink";
+import { Box, Text, useApp, useInput, useStdout } from "ink";
 import type {
   ExtensionProfile,
   FileRefs,
@@ -23,7 +23,7 @@ import { Analyzer } from "./components/analyzer.js";
 import { Explorer } from "./components/explorer.js";
 import { ReportForm, BOOLEAN_KEYS, LISTENER_START } from "./components/report-form.js";
 import { StatusBar } from "./components/status-bar.js";
-import { TopBar } from "./components/ui.js";
+import { TopBar, listPageSize } from "./components/ui.js";
 import type {
   AnalyzerState,
   ConnectionStatus,
@@ -59,6 +59,10 @@ export function App({
 }) {
   const sshMode = sshSpec !== null;
   const { exit } = useApp();
+  const { stdout } = useStdout();
+  // One screen of extensions per page. The list never renders more rows
+  // than fit the terminal.
+  const pageSize = listPageSize(stdout.rows);
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("explorer");
@@ -88,6 +92,12 @@ export function App({
   });
   const [form, setForm] = useState<ReportDraftForm | null>(null);
   const [tunnel, setTunnel] = useState<TunnelStatus>(sshMode ? "connecting" : "up");
+  // Search as you type, but only query the host after the input settles.
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(explorer.search), 300);
+    return () => clearTimeout(timer);
+  }, [explorer.search]);
   const [passwordPrompt, setPasswordPrompt] = useState<{
     message: string;
     resolve: (secret: string) => void;
@@ -176,19 +186,22 @@ export function App({
     void client
       .call<ListResult>("extensions.list", {
         page: explorer.page,
-        pageSize: 50,
-        search: explorer.search || undefined,
+        pageSize,
+        search: debouncedSearch || undefined,
         sort: explorer.sort,
       })
       .then((result) => {
         if (cancelled) return;
+        // Defense in depth: never render more than the page size, even if
+        // the host ignores pagination.
+        const lights = result.extensions.slice(0, pageSize);
         setExplorer((e) => ({
           ...e,
-          lights: result.extensions,
+          lights,
           stats: result.stats,
           totalPages: result.totalPages,
           loading: false,
-          selectedIndex: Math.min(e.selectedIndex, Math.max(0, result.extensions.length - 1)),
+          selectedIndex: Math.min(e.selectedIndex, Math.max(0, lights.length - 1)),
         }));
       })
       .catch((error: Error) => {
@@ -197,7 +210,7 @@ export function App({
     return () => {
       cancelled = true;
     };
-  }, [client, status, explorer.page, explorer.search, explorer.sort]);
+  }, [client, status, explorer.page, debouncedSearch, explorer.sort, pageSize]);
 
   const loadProfile = useCallback(
     async (id: string) => {
@@ -465,9 +478,14 @@ export function App({
       if (key.escape || key.return || key.upArrow || key.downArrow) {
         setExplorer((e) => ({ ...e, searchFocused: false }));
       } else if (key.backspace || key.delete) {
-        setExplorer((e) => ({ ...e, search: e.search.slice(0, -1) }));
+        setExplorer((e) => ({ ...e, search: e.search.slice(0, -1), page: 1, selectedIndex: 0 }));
       } else if (input && !key.ctrl && !key.meta) {
-        setExplorer((e) => ({ ...e, search: e.search + input }));
+        setExplorer((e) => ({
+          ...e,
+          search: e.search + input,
+          page: 1,
+          selectedIndex: 0,
+        }));
       }
       return;
     }

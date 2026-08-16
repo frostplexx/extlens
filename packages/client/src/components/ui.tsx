@@ -43,6 +43,11 @@ export function Section({
   );
 }
 
+/** Rows available for the explorer list, given the terminal height. */
+export function listPageSize(rows?: number): number {
+  return Math.max(5, Math.min(40, (rows ?? 24) - 7));
+}
+
 /** App header: brand + title on the left, contextual controls on the right. */
 export function TopBar({
   title,

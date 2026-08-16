@@ -88,6 +88,12 @@ Result:
 
 - `total`: every extension the host knows.
 - `analyzed`: extensions that have a profile (score).
+
+Host requirements for large catalogs:
+
+- Hosts must slice to `pageSize`. The SDK rejects a page with more than 200 rows.
+- Sort must be stable across pages. Tie-break by id.
+- For 100k+ extensions, index the name search host-side. The `search` value is a case-insensitive substring.
 - `withMv3`: extensions that have an MV3 variant.
 - `avgScore`: mean interestingness over analyzed extensions. `0` when analyzed is 0.
 
@@ -280,4 +286,5 @@ protocol reserves their names so hosts can detect a newer client.
 
 ## Changelog
 
+- v2 — `extensions.list` page arrays cannot exceed 200 rows. Hosts must paginate; the SDK rejects oversized pages. Client requests one screen per page and debounces search.
 - v1 — initial protocol: ping, extensions.list/get/files, reports.get/submit.

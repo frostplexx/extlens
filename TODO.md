@@ -16,6 +16,9 @@
   after entry; downloads do not re-prompt
 - [ ] Verify the SSH session against a jump-host alias and against a `file://` ref
   (mv2 as a manifest.json file, mv3 as a directory)
+- [ ] Verify `extensions.list` pagination at scale — the SDK rejects a page over 200
+  rows (`Too many items`), the client requests one screen per page, and search is
+  debounced (packages/protocol/src/messages.ts, packages/client/src/app.tsx)
 
 ## Blocked on user action
 

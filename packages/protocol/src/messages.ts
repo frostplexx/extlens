@@ -95,7 +95,7 @@ export const ListStatsSchema = z.object({
 });
 
 export const ListResultSchema = z.object({
-  extensions: z.array(ExtensionLightSchema),
+  extensions: z.array(ExtensionLightSchema).max(200),
   stats: ListStatsSchema,
   page: z.number().int().positive(),
   pageSize: z.number().int().min(1).max(200),

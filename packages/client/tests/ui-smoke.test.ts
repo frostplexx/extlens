@@ -6,7 +6,7 @@ import type { ExtensionLight, ListStats } from "@extlens/protocol";
 import { Explorer } from "../src/components/explorer.js";
 import { Analyzer } from "../src/components/analyzer.js";
 import { StatusBar } from "../src/components/status-bar.js";
-import { TopBar } from "../src/components/ui.js";
+import { TopBar, listPageSize } from "../src/components/ui.js";
 import type { AnalyzerState, ExplorerState } from "../src/types.js";
 
 /**
@@ -86,6 +86,13 @@ const analyzerState: AnalyzerState = {
 };
 
 describe("ui rendering", () => {
+  it("sizes list pages to the terminal", () => {
+    expect(listPageSize(24)).toBe(17);
+    expect(listPageSize(50)).toBe(40);
+    expect(listPageSize(10)).toBe(5);
+    expect(listPageSize(undefined)).toBe(17);
+  });
+
   it("renders the top bar with title and right controls", async () => {
     const out = await capture(
       React.createElement(TopBar, {

@@ -149,6 +149,29 @@ describe("extensions.list result", () => {
     expect(ListResultSchema.parse(result)).toEqual(result);
   });
 
+  test("accepts a full page of 200", () => {
+    const result = {
+      extensions: Array.from({ length: 200 }, () => light),
+      stats: { total: 1, analyzed: 1, withMv3: 1, avgScore: 74 },
+      page: 1,
+      pageSize: 200,
+      totalPages: 1,
+    };
+    expect(ListResultSchema.parse(result).extensions).toHaveLength(200);
+  });
+
+  test("rejects a page over 200 rows", () => {
+    expect(() =>
+      ListResultSchema.parse({
+        extensions: Array.from({ length: 201 }, () => light),
+        stats: { total: 1, analyzed: 1, withMv3: 1, avgScore: 74 },
+        page: 1,
+        pageSize: 200,
+        totalPages: 1,
+      }),
+    ).toThrow();
+  });
+
   test("rejects a light without a score", () => {
     expect(() => ExtensionLightSchema.parse({ ...light, score: undefined })).toThrow();
   });
