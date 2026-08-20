@@ -117,12 +117,31 @@ export async function dispatch(backend: Backend, request: RpcRequest): Promise<R
         result = { status: await host.start(id) };
         break;
       }
+      case "host.startAll": {
+        const host = backend.host;
+        if (!host || !host.startAll) {
+          throw new RpcError(ErrorCodes.METHOD_NOT_FOUND, "host.startAll not supported by this backend");
+        }
+        result = { status: await host.startAll() };
+        break;
+      }
       case "host.stop": {
         const host = backend.host;
         if (!host) {
           throw new RpcError(ErrorCodes.METHOD_NOT_FOUND, "host lifecycle not supported by this backend");
         }
         result = { status: await host.stop() };
+        break;
+      }
+      case "host.log": {
+        const host = backend.host;
+        if (!host) {
+          throw new RpcError(ErrorCodes.METHOD_NOT_FOUND, "host lifecycle not supported by this backend");
+        }
+        const { offset } = params as { offset: number };
+        result = host.getLog
+          ? await host.getLog(offset)
+          : { lines: [], nextOffset: offset };
         break;
       }
     }

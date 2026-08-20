@@ -85,6 +85,8 @@ export const ExtensionLightSchema = z.object({
   score: z.number().int(),
   tags: z.array(z.string()),
   hasMv3: z.boolean(),
+  /** A report exists for this extension (it was tested). */
+  hasReport: z.boolean(),
 });
 
 export const ListStatsSchema = z.object({
@@ -200,19 +202,37 @@ export const ListenerTestResultSchema = z.object({
   status: ListenerTestStatusSchema,
 });
 
-/** Client -> host report payload. The host stamps id and timestamps. */
+/** Overall working verdict: yes, no, or could not test. */
+export const OverallWorkingSchema = z.enum(["yes", "no", "could_not_test"]);
+
+/**
+ * Accepts legacy boolean overallWorking values (true -> "yes", false -> "no")
+ * so reports written before the tri-state string survive re-validation.
+ */
+export const ReportOverallWorkingSchema = z.preprocess(
+  (value) => (typeof value === "boolean" ? (value ? "yes" : "no") : value),
+  OverallWorkingSchema,
+);
+
+/**
+ * Client -> host report payload, matching the ExtPorter report form. The host
+ * stamps id and timestamps. The quick-assessment booleans are nullable so
+ * hosts can serve reports written before this field set existed.
+ */
 export const ReportDraftSchema = z.object({
   extensionId: ExtensionIdSchema,
   tested: z.boolean(),
-  overallWorking: z.boolean().nullable(),
-  hasErrors: z.boolean().nullable(),
-  seemsSlower: z.boolean().nullable(),
-  needsLogin: z.boolean().nullable(),
-  isPopupBroken: z.boolean().nullable(),
-  isSettingsBroken: z.boolean().nullable(),
-  isInteresting: z.boolean().nullable(),
-  notes: z.string(),
-  listeners: z.array(ListenerTestResultSchema),
+  verificationDurationSecs: z.number().nonnegative().nullable().default(null),
+  installs: z.boolean().nullable().default(null),
+  worksInMv2: z.boolean().nullable().default(null),
+  needsLogin: z.boolean().nullable().default(null),
+  isPopupWorking: z.boolean().nullable().default(null),
+  isSettingsWorking: z.boolean().nullable().default(null),
+  isNewTabWorking: z.boolean().nullable().default(null),
+  isInteresting: z.boolean().nullable().default(null),
+  overallWorking: ReportOverallWorkingSchema.nullable().default(null),
+  notes: z.string().default(""),
+  listeners: z.array(ListenerTestResultSchema).default([]),
 });
 
 /** Full report as returned by reports.get. */
@@ -247,6 +267,36 @@ export const HostStatusSchema = z.object({
 export const HostStartParamsSchema = z.object({ id: ExtensionIdSchema });
 
 // ---------------------------------------------------------------------------
+// host.log
+// ---------------------------------------------------------------------------
+
+/** Captured host log stream: stdout (info) or stderr (errors). */
+export const LogStreamSchema = z.enum(["stdout", "stderr"]);
+
+/** One captured host log line. */
+export const LogLineSchema = z.object({
+  /** Monotonic per-run line number. The client asks for lines with seq > offset. */
+  seq: z.number().int().positive(),
+  /** ISO timestamp when the line was captured, or null when unknown. */
+  ts: z.string().nullable(),
+  stream: LogStreamSchema,
+  text: z.string(),
+});
+
+/** Params for host.log. `offset` is the last seq the client already has. */
+export const HostLogParamsSchema = z
+  .object({
+    offset: z.number().int().nonnegative().default(0),
+  })
+  .default({});
+
+export const HostLogResultSchema = z.object({
+  lines: z.array(LogLineSchema),
+  /** Largest seq emitted so far. Pass it back as the next `offset`. */
+  nextOffset: z.number().int().nonnegative(),
+});
+
+// ---------------------------------------------------------------------------
 // Method registry
 // ---------------------------------------------------------------------------
 
@@ -278,9 +328,17 @@ export const MethodsSchema = {
     params: HostStartParamsSchema,
     result: z.object({ status: HostStatusSchema }),
   },
+  "host.startAll": {
+    params: undefined,
+    result: z.object({ status: HostStatusSchema }),
+  },
   "host.stop": {
     params: undefined,
     result: z.object({ status: HostStatusSchema }),
+  },
+  "host.log": {
+    params: HostLogParamsSchema,
+    result: HostLogResultSchema,
   },
 } as const;
 

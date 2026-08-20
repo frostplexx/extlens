@@ -102,23 +102,29 @@ describe("FolderBackend", () => {
 
   test("round-trips reports", async () => {
     const backend = makeBackend();
-    const list = await backend.listExtensions({ page: 1, pageSize: 1, sort: "name" });
-    const id = list.extensions[0]!.id;
+    const before = await backend.listExtensions({ page: 1, pageSize: 1, sort: "name" });
+    const id = before.extensions[0]!.id;
+    expect(before.extensions[0]!.hasReport).toBe(false);
     expect(await backend.getReport(id)).toBeNull();
     const draft = {
       extensionId: id,
       tested: true,
-      overallWorking: true,
-      hasErrors: false,
-      seemsSlower: null,
-      needsLogin: null,
-      isPopupBroken: null,
-      isSettingsBroken: null,
+      verificationDurationSecs: null,
+      installs: true,
+      worksInMv2: true,
+      needsLogin: false,
+      isPopupWorking: null,
+      isSettingsWorking: null,
+      isNewTabWorking: null,
       isInteresting: true,
+      overallWorking: "yes" as const,
       notes: "folder mode",
       listeners: [],
     };
     expect(await backend.submitReport(draft)).toBe(id);
+    const after = await backend.listExtensions({ page: 1, pageSize: 1, sort: "name" });
+    expect(after.extensions[0]!.id).toBe(id);
+    expect(after.extensions[0]!.hasReport).toBe(true);
     const report = await backend.getReport(id);
     expect(report).toMatchObject({ id, extensionId: id, tested: true, notes: "folder mode" });
     expect(report!.createdAt).toBe(report!.updatedAt);
@@ -171,13 +177,15 @@ describe("folder backend over the wire", () => {
       report: {
         extensionId: first.id,
         tested: false,
-        overallWorking: null,
-        hasErrors: null,
-        seemsSlower: null,
+        verificationDurationSecs: null,
+        installs: false,
+        worksInMv2: false,
         needsLogin: null,
-        isPopupBroken: null,
-        isSettingsBroken: null,
+        isPopupWorking: null,
+        isSettingsWorking: null,
+        isNewTabWorking: null,
         isInteresting: null,
+        overallWorking: "no",
         notes: "wire",
         listeners: [],
       },

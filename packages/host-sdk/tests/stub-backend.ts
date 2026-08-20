@@ -58,6 +58,7 @@ export function makeStubBackend(): Backend & { reports: Map<string, Report> } {
           score: profile.score,
           tags: profile.tags,
           hasMv3: profile.hasMv3,
+          hasReport: reports.has(profile.id),
         };
       });
       const sorted = [...all].sort((a, b) => {

@@ -20,6 +20,8 @@ function resolveWsUrl(argv: string[]): string {
 function main(): void {
   const argv = process.argv.slice(2);
   const sshSpec = parseSshSpec(argv);
+  // Clear the terminal so the TUI starts on a clean full screen.
+  process.stdout.write("\u001b[2J\u001b[H");
   render(
     React.createElement(App, {
       wsUrl: resolveWsUrl(argv),

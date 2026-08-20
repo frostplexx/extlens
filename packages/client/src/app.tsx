@@ -1,10 +1,13 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Box, Text, useApp, useInput, useStdout } from "ink";
 import type {
   ExtensionProfile,
   FileRefs,
+  HostLogResult,
   HostStatus,
   ListResult,
+  LogLine,
+  OverallWorking,
   Report,
   ReportDraft,
   SortOrder,
@@ -22,25 +25,19 @@ import {
 import { BrowserManager, resolveExecutable } from "./browsers/manager.js";
 import { Analyzer } from "./components/analyzer.js";
 import { Explorer } from "./components/explorer.js";
-import { ReportForm, BOOLEAN_KEYS, LISTENER_START } from "./components/report-form.js";
+import { ReportForm, buildReportRows } from "./components/report-form.js";
 import { StatusBar } from "./components/status-bar.js";
-import { HostStatusView, TopBar, listPageSize } from "./components/ui.js";
+import { HelpView, LogView, TopBar, listPageSize } from "./components/ui.js";
+import { c } from "./theme.js";
 import type {
   AnalyzerState,
   ConnectionStatus,
   ExplorerState,
   ReportDraftForm,
-  Tab,
-  TriState,
+  View,
 } from "./types.js";
 
 const SORTS: SortOrder[] = ["interestingness_desc", "interestingness_asc", "name"];
-
-const SORT_LABELS: Record<SortOrder, string> = {
-  interestingness_desc: "score↓",
-  interestingness_asc: "score↑",
-  name: "name",
-};
 
 const IDLE_BROWSER = { phase: "idle" as const, message: null, extensionId: null };
 
@@ -48,6 +45,33 @@ function fileRefToPath(ref: string): string {
   let path = ref.startsWith("file://") ? fileURLToPath(ref) : ref;
   if (path.endsWith("manifest.json")) path = dirname(path);
   return path;
+}
+
+/** Conditional form rows: which manifest capabilities exist. */
+function manifestFlags(profile: ExtensionProfile | null): {
+  hasPopup: boolean;
+  hasSettings: boolean;
+  isNewTab: boolean;
+} {
+  const manifest = profile?.manifest;
+  return {
+    hasPopup: !!manifest?.action?.defaultPopup,
+    hasSettings: !!manifest?.optionsPage,
+    isNewTab: !!manifest?.chromeUrlOverrides?.newtab,
+  };
+}
+
+/** ExtPorter dependency rule: a failing quick assessment downgrades overall. */
+function downgradeOverall(
+  f: ReportDraftForm,
+  flags: { hasPopup: boolean; hasSettings: boolean; isNewTab: boolean },
+): OverallWorking {
+  if (!f.installs) return "no";
+  if (f.needsLogin) return "could_not_test";
+  if (flags.hasPopup && !f.isPopupWorking) return "no";
+  if (flags.hasSettings && !f.isSettingsWorking) return "no";
+  if (flags.isNewTab && !f.isNewTabWorking) return "no";
+  return f.overallWorking;
 }
 
 export function App({
@@ -66,7 +90,8 @@ export function App({
   const pageSize = listPageSize(stdout.rows);
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>("explorer");
+  const [view, setView] = useState<View>("explorer");
+  const [helpOpen, setHelpOpen] = useState(false);
   const [explorer, setExplorer] = useState<ExplorerState>({
     lights: [],
     stats: null,
@@ -89,9 +114,16 @@ export function App({
     mv2: IDLE_BROWSER,
     mv3: IDLE_BROWSER,
     formOpen: false,
-    prompt: null,
+    prompts: [],
+    scroll: 0,
   });
   const [form, setForm] = useState<ReportDraftForm | null>(null);
+  // Conditional form rows and the ExtPorter dependency flags for the current profile.
+  const formFlags = useMemo(() => manifestFlags(analyzer.profile), [analyzer.profile]);
+  const formRows = useMemo(
+    () => buildReportRows({ ...formFlags, listenerCount: analyzer.profile?.listeners.length ?? 0 }),
+    [formFlags, analyzer.profile?.listeners.length],
+  );
   const [tunnel, setTunnel] = useState<TunnelStatus>(sshMode ? "connecting" : "up");
   // Search as you type, but only query the host after the input settles.
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -107,6 +139,11 @@ export function App({
     supported: boolean;
     error: string | null;
   }>({ status: null, supported: true, error: null });
+  // Incremental host.log lines for the log dock. logOffset is the largest
+  // seq already appended; prevRunStart identifies the job being logged.
+  const [logs, setLogs] = useState<LogLine[]>([]);
+  const logOffset = useRef(0);
+  const prevRunStart = useRef<string | null>(null);
   // Bumped to refetch the list when a host job finishes or stops: the
   // corpus may have changed (a new run row appears).
   const [refreshKey, setRefreshKey] = useState(0);
@@ -197,22 +234,50 @@ export function App({
     };
   }, [client, status]);
 
-  // Poll host.status while a job runs; refetch the list when it ends.
+  const fetchLogs = useCallback(() => {
+    if (!client) return;
+    void client
+      .call<HostLogResult>("host.log", { offset: logOffset.current })
+      .then((r) => {
+        const fresh = r.lines.filter((line) => line.seq > logOffset.current);
+        if (fresh.length) setLogs((prev) => [...prev, ...fresh]);
+        logOffset.current = Math.max(logOffset.current, r.nextOffset);
+      })
+      .catch(() => {
+        /* host without host.log: the log dock falls back to status.message */
+      });
+  }, [client]);
+
+  // Poll host.status while a job runs; refetch the list when it ends. Also
+  // pull incremental host.log lines and append them to the log dock.
   useEffect(() => {
     if (!client || status !== "connected") return;
     const st = host.status;
-    if (!st || (st.state !== "running" && st.state !== "stopping")) return;
+    if (!st) return;
+    const active = st.state === "running" || st.state === "stopping";
+    // A new startedAt means a new job: reset the log dock and re-read from seq 1.
+    if (active && st.startedAt !== prevRunStart.current) {
+      setLogs([]);
+      logOffset.current = 0;
+    }
+    prevRunStart.current = active ? st.startedAt : null;
+    if (!active) return;
     const timer = setInterval(() => {
       void client
         .call<{ status: HostStatus }>("host.status")
         .then((r) => {
           setHost((h) => ({ ...h, status: r.status }));
-          if (r.status.state === "idle") setRefreshKey((k) => k + 1);
+          if (r.status.state === "idle") {
+            setRefreshKey((k) => k + 1);
+            fetchLogs();
+          }
         })
         .catch((error: Error) => setHost((h) => ({ ...h, error: error.message })));
+      fetchLogs();
     }, 1500);
+    fetchLogs();
     return () => clearInterval(timer);
-  }, [client, status, host.status?.state]);
+  }, [client, status, host.status?.state, fetchLogs]);
 
   const toggleHost = useCallback(() => {
     if (!client || status !== "connected") return;
@@ -227,15 +292,13 @@ export function App({
         .catch((error: Error) => setHost((h) => ({ ...h, error: error.message })));
       return;
     }
-    const light = explorer.lights[explorer.selectedIndex];
-    if (!light) return;
     void client
-      .call<{ status: HostStatus }>("host.start", { id: light.id })
+      .call<{ status: HostStatus }>("host.startAll")
       .then((r) => {
         setHost((h) => ({ ...h, status: r.status, error: null }));
       })
       .catch((error: Error) => setHost((h) => ({ ...h, error: error.message })));
-  }, [client, status, host.status, explorer.lights, explorer.selectedIndex]);
+  }, [client, status, host.status]);
 
   // Explorer fetch: runs when the connection becomes available or when
   // page / search / sort / refreshKey change. Without the status dependency,
@@ -280,7 +343,7 @@ export function App({
     return () => {
       cancelled = true;
     };
-  }, [client, status, explorer.page, debouncedSearch, explorer.sort, pageSize]);
+  }, [client, status, explorer.page, debouncedSearch, explorer.sort, pageSize, refreshKey]);
 
   const loadProfile = useCallback(
     async (id: string) => {
@@ -319,7 +382,7 @@ export function App({
   const openAnalyzer = useCallback(() => {
     const light = explorer.lights[explorer.selectedIndex];
     if (!light) return;
-    setTab("analyzer");
+    setView("analyzer");
     setAnalyzer((a) => ({
       ...a,
       id: light.id,
@@ -331,7 +394,8 @@ export function App({
       formOpen: false,
       mv2: IDLE_BROWSER,
       mv3: IDLE_BROWSER,
-      prompt: null,
+      prompts: [],
+      scroll: 0,
     }));
     void loadProfile(light.id);
   }, [explorer.lights, explorer.selectedIndex, loadProfile]);
@@ -352,20 +416,19 @@ export function App({
     if (!id || !files) return;
     const manager = browsersRef.current;
     await manager.closeAll();
-    setAnalyzer((a) => ({ ...a, mv2: IDLE_BROWSER, mv3: IDLE_BROWSER, prompt: null }));
+    setAnalyzer((a) => ({ ...a, mv2: IDLE_BROWSER, mv3: IDLE_BROWSER, prompts: [] }));
+    const missing: { label: "mv2" | "mv3"; message: string }[] = [];
     for (const label of ["mv2", "mv3"] as const) {
       const ref = files[label];
       if (!ref) continue;
       const executable = resolveExecutable(label);
       if (!executable) {
-        setAnalyzer((a) => ({
-          ...a,
-          prompt: { label, message: missingBrowserMessage(label) },
-        }));
+        missing.push({ label, message: missingBrowserMessage(label) });
         continue;
       }
       launchOne(label, executable, fileRefToPath(ref));
     }
+    if (missing.length > 0) setAnalyzer((a) => ({ ...a, prompts: missing }));
   }, [analyzer, launchOne]);
 
   const downloadAndLaunch = useCallback(
@@ -374,7 +437,7 @@ export function App({
       if (!id || !files || !files[label]) return;
       setAnalyzer((a) => ({
         ...a,
-        prompt: null,
+        prompts: a.prompts.slice(1),
         [label]: { phase: "downloading", message: "downloading chrome for testing…", extensionId: null },
       }));
       try {
@@ -421,14 +484,14 @@ export function App({
       return found ? found.status : "untested";
     });
     setForm({
-      tested: saved?.tested ?? null,
-      overallWorking: saved?.overallWorking ?? null,
-      hasErrors: saved?.hasErrors ?? null,
-      seemsSlower: saved?.seemsSlower ?? null,
-      needsLogin: saved?.needsLogin ?? null,
-      isPopupBroken: saved?.isPopupBroken ?? null,
-      isSettingsBroken: saved?.isSettingsBroken ?? null,
-      isInteresting: saved?.isInteresting ?? null,
+      installs: saved?.installs ?? true,
+      worksInMv2: saved?.worksInMv2 ?? true,
+      needsLogin: saved?.needsLogin ?? false,
+      isPopupWorking: saved?.isPopupWorking ?? true,
+      isSettingsWorking: saved?.isSettingsWorking ?? true,
+      isNewTabWorking: saved?.isNewTabWorking ?? true,
+      isInteresting: saved?.isInteresting ?? false,
+      overallWorking: saved?.overallWorking ?? "yes",
       notes: saved?.notes ?? "",
       listenerStatus: statuses,
       cursor: 0,
@@ -436,6 +499,7 @@ export function App({
       saving: false,
       savedId: null,
       error: null,
+      verificationStart: Date.now(),
     });
     setAnalyzer((a) => ({ ...a, formOpen: true }));
   }, [analyzer.profile, analyzer.report]);
@@ -445,31 +509,43 @@ export function App({
     setAnalyzer((a) => ({ ...a, formOpen: false }));
   }, []);
 
-  const cycleForm = useCallback((delta: 1 | -1) => {
-    setForm((f) => {
-      if (!f || f.notesFocused || f.cursor === BOOLEAN_KEYS.length) return f;
-      if (f.cursor >= LISTENER_START) {
-        const i = f.cursor - LISTENER_START;
-        const cycle = ["untested", "yes", "no"] as const;
-        const statuses = [...f.listenerStatus];
-        const idx = (cycle.indexOf(statuses[i] ?? "untested") + delta + 3) % 3;
-        statuses[i] = cycle[idx];
-        return { ...f, listenerStatus: statuses };
-      }
-      const field = BOOLEAN_KEYS[f.cursor];
-      const cycle = [null, true, false] as const;
-      const idx = (cycle.indexOf(f[field]) + delta + 3) % 3;
-      return { ...f, [field]: cycle[idx] };
-    });
-  }, []);
+  const cycleForm = useCallback(
+    (delta: 1 | -1) => {
+      setForm((f) => {
+        if (!f || f.notesFocused) return f;
+        const row = formRows[f.cursor];
+        if (!row) return f;
+        if (row.kind === "listener") {
+          const cycle = ["untested", "yes", "no"] as const;
+          const statuses = [...f.listenerStatus];
+          const idx = (cycle.indexOf(statuses[row.index] ?? "untested") + delta + 3) % 3;
+          statuses[row.index] = cycle[idx];
+          return { ...f, listenerStatus: statuses };
+        }
+        if (row.kind === "boolean") {
+          const next = { ...f, [row.field]: !f[row.field] };
+          return { ...next, overallWorking: downgradeOverall(next, formFlags) };
+        }
+        if (row.kind === "overall") {
+          const cycle = ["yes", "no", "could_not_test"] as const;
+          const idx = (cycle.indexOf(f.overallWorking) + delta + 3) % 3;
+          return { ...f, overallWorking: cycle[idx] };
+        }
+        return f;
+      });
+    },
+    [formRows, formFlags],
+  );
 
-  const moveForm = useCallback((delta: 1 | -1) => {
-    setForm((f) => {
-      if (!f || f.notesFocused) return f;
-      const rows = LISTENER_START + f.listenerStatus.length;
-      return { ...f, cursor: (f.cursor + delta + rows) % rows };
-    });
-  }, []);
+  const moveForm = useCallback(
+    (delta: 1 | -1) => {
+      setForm((f) => {
+        if (!f || f.notesFocused || formRows.length === 0) return f;
+        return { ...f, cursor: (f.cursor + delta + formRows.length) % formRows.length };
+      });
+    },
+    [formRows.length],
+  );
 
   const toggleNotes = useCallback(() => {
     setForm((f) => (f ? { ...f, notesFocused: !f.notesFocused } : f));
@@ -482,20 +558,24 @@ export function App({
   const submitForm = useCallback(() => {
     const f = form;
     const id = analyzer.id;
-    if (!f || !id || f.saving || !client) return;
+    const profile = analyzer.profile;
+    if (!f || !id || !profile || f.saving || !client) return;
     setForm((x) => (x ? { ...x, saving: true, error: null } : x));
+    const flags = manifestFlags(profile);
     const draft: ReportDraft = {
       extensionId: id,
-      tested: f.tested === true,
-      overallWorking: f.overallWorking,
-      hasErrors: f.hasErrors,
-      seemsSlower: f.seemsSlower,
+      tested: true,
+      verificationDurationSecs: (Date.now() - f.verificationStart) / 1000,
+      installs: f.installs,
+      worksInMv2: f.worksInMv2,
       needsLogin: f.needsLogin,
-      isPopupBroken: f.isPopupBroken,
-      isSettingsBroken: f.isSettingsBroken,
+      isPopupWorking: flags.hasPopup ? f.isPopupWorking : null,
+      isSettingsWorking: flags.hasSettings ? f.isSettingsWorking : null,
+      isNewTabWorking: flags.isNewTab ? f.isNewTabWorking : null,
       isInteresting: f.isInteresting,
+      overallWorking: f.overallWorking,
       notes: f.notes,
-      listeners: (analyzer.profile?.listeners ?? []).map((l, i) => ({
+      listeners: profile.listeners.map((l, i) => ({
         api: l.api,
         file: l.file,
         line: l.line,
@@ -530,24 +610,42 @@ export function App({
       }
       return;
     }
-    if (tab === "analyzer" && analyzer.formOpen) return; // report form owns keys
+    if (helpOpen) {
+      if (key.escape || input === "?" || input === "q") setHelpOpen(false);
+      if (key.ctrl && input === "c") exit();
+      return;
+    }
+    if (view === "analyzer" && analyzer.formOpen) {
+      // The report form owns keys, but '?' still opens help when not typing notes.
+      if (input === "?" && !form?.notesFocused) setHelpOpen(true);
+      return;
+    }
 
-    const prompt = analyzer.prompt;
+    const prompt = analyzer.prompts[0];
     if (prompt) {
       if (input === "y" || input === "Y") {
         void downloadAndLaunch(prompt.label);
       } else if (input === "n" || input === "N" || key.escape) {
         setAnalyzer((a) => ({
           ...a,
-          prompt: null,
+          prompts: a.prompts.slice(1),
           [prompt.label]: { phase: "failed", message: prompt.message, extensionId: null },
         }));
       }
       return;
     }
-    if (tab === "explorer" && explorer.searchFocused) {
-      if (key.escape || key.return || key.upArrow || key.downArrow) {
+    if (view === "explorer" && explorer.searchFocused) {
+      if (key.escape || key.return) {
         setExplorer((e) => ({ ...e, searchFocused: false }));
+      } else if (key.ctrl && input === "u") {
+        setExplorer((e) => ({ ...e, search: "", page: 1, selectedIndex: 0 }));
+      } else if (key.upArrow) {
+        setExplorer((e) => ({ ...e, selectedIndex: Math.max(0, e.selectedIndex - 1) }));
+      } else if (key.downArrow) {
+        setExplorer((e) => ({
+          ...e,
+          selectedIndex: Math.min(e.lights.length - 1, e.selectedIndex + 1),
+        }));
       } else if (key.backspace || key.delete) {
         setExplorer((e) => ({ ...e, search: e.search.slice(0, -1), page: 1, selectedIndex: 0 }));
       } else if (input && !key.ctrl && !key.meta) {
@@ -569,8 +667,20 @@ export function App({
       exit();
       return;
     }
+    if (input === "?") {
+      setHelpOpen(true);
+      return;
+    }
+    if (input === "l") {
+      if (view === "log") {
+        setView("explorer");
+      } else {
+        setView("log");
+      }
+      return;
+    }
 
-    if (tab === "explorer") {
+    if (view === "explorer") {
       if (input === "/") {
         setExplorer((e) => ({ ...e, searchFocused: true }));
         return;
@@ -579,32 +689,64 @@ export function App({
         setExplorer((e) => ({ ...e, sort: SORTS[(SORTS.indexOf(e.sort) + 1) % SORTS.length] }));
         return;
       }
-      if (key.upArrow) {
+      if (key.upArrow || input === "k") {
         setExplorer((e) => ({ ...e, selectedIndex: Math.max(0, e.selectedIndex - 1) }));
         return;
       }
-      if (key.downArrow) {
+      if (key.downArrow || input === "j") {
         setExplorer((e) => ({
           ...e,
           selectedIndex: Math.min(e.lights.length - 1, e.selectedIndex + 1),
         }));
         return;
       }
+      if (input === "g") {
+        setExplorer((e) => ({ ...e, selectedIndex: 0 }));
+        return;
+      }
+      if (input === "G") {
+        setExplorer((e) => ({ ...e, selectedIndex: Math.max(0, e.lights.length - 1) }));
+        return;
+      }
       if (key.return) {
         openAnalyzer();
         return;
       }
-      if (input === "n") {
+      if (input === "m") {
+        toggleHost();
+        return;
+      }
+      if (key.pageDown || input === "n") {
         setExplorer((e) => ({ ...e, page: Math.min(e.totalPages, e.page + 1) }));
         return;
       }
-      if (input === "p") {
+      if (key.pageUp || input === "p") {
         setExplorer((e) => ({ ...e, page: Math.max(1, e.page - 1) }));
         return;
       }
+    } else if (view === "log") {
+      if (key.escape || key.backspace) {
+        setView("explorer");
+      }
     } else {
       if (key.escape || key.backspace) {
-        setTab("explorer");
+        setView("explorer");
+        return;
+      }
+      if (key.upArrow || input === "k") {
+        setAnalyzer((a) => ({ ...a, scroll: Math.max(0, a.scroll - 1) }));
+        return;
+      }
+      if (key.downArrow || input === "j") {
+        setAnalyzer((a) => ({ ...a, scroll: a.scroll + 1 }));
+        return;
+      }
+      if (input === "g") {
+        setAnalyzer((a) => ({ ...a, scroll: 0 }));
+        return;
+      }
+      if (input === "G") {
+        setAnalyzer((a) => ({ ...a, scroll: 1000000 }));
         return;
       }
       if (input === "b") {
@@ -622,47 +764,45 @@ export function App({
   });
 
   const hints =
-    tab === "explorer"
-      ? "↑/↓ select · enter open · / search · s sort · n/p page · q quit"
-      : analyzer.formOpen || analyzer.error || !analyzer.profile
-        ? ""
-        : "b launch · x close · r report · esc back · q quit";
+    view === "explorer"
+      ? "↑/↓ j/k select · enter open · / search · ? help · q quit"
+      : view === "log"
+        ? "esc back · ? help · q quit"
+        : analyzer.formOpen || analyzer.error || !analyzer.profile
+          ? "? help · q quit"
+          : "↑/↓ j/k scroll · b launch · x close · r report · esc back · ? help · q quit";
 
   return (
     <Box flexDirection="column">
       {passwordPrompt ? (
-        <Box flexDirection="column" borderStyle="round" borderColor="yellow" paddingX={1} marginBottom={1}>
+        <Box flexDirection="column" borderStyle="round" borderColor={c.warning} paddingX={1} marginBottom={1}>
           <Text bold>password required</Text>
           <Text>{passwordPrompt.message}</Text>
-          <Text color="cyan">{"•".repeat(secret.length) || " "}</Text>
-          <Text dimColor>enter to submit · esc to cancel</Text>
+          <Text color={c.accent}>{"•".repeat(secret.length) || " "}</Text>
+          <Text color={c.muted}>enter to submit · esc to cancel</Text>
         </Box>
       ) : null}
-      <TopBar
-        title={`extension ${tab}`}
-        right={
-          tab === "explorer" ? (
-            explorer.searchFocused ? (
-              <>
-                search <Text color="cyan">{explorer.search}▌</Text>
-                <Text dimColor>  (enter or esc to close)</Text>
-              </>
-            ) : (
-              <>
-                search <Text color={explorer.search ? "cyan" : undefined}>{explorer.search || "off"}</Text>
-                <Text dimColor> (/) · sort </Text>
-                <Text color="cyan">{SORT_LABELS[explorer.sort]}</Text>
-                <Text dimColor> (s) · page </Text>
-                <Text color="cyan">{explorer.page}/{explorer.totalPages}</Text>
-              </>
-            )
-          ) : null
-        }
-      />
-      {tab === "explorer" ? <Explorer state={explorer} /> : <Analyzer state={analyzer} />}
-      {tab === "analyzer" && analyzer.formOpen && form ? (
+      <TopBar status={status} />
+      {helpOpen ? (
+        <HelpView />
+      ) : view === "explorer" ? (
+        <Explorer state={explorer} host={host} pageSize={pageSize} />
+      ) : view === "log" ? (
+        <LogView
+          status={host.status}
+          lines={logs}
+          error={host.error}
+        />
+      ) : analyzer.formOpen && form && !helpOpen ? (
         <ReportForm
           form={form}
+          rows={formRows}
+          auto={{
+            name: analyzer.profile?.name ?? "",
+            mv2Id: analyzer.profile?.mv2?.id ?? null,
+            mv3Id: analyzer.profile?.manifest.id ?? null,
+            elapsedSecs: (Date.now() - form.verificationStart) / 1000,
+          }}
           onCycle={cycleForm}
           onMove={moveForm}
           onToggleNotes={toggleNotes}
@@ -671,11 +811,11 @@ export function App({
           onCancel={closeReportForm}
           listenerApis={(analyzer.profile?.listeners ?? []).map((l) => ({ api: l.api, file: l.file }))}
         />
-      ) : null}
+      ) : (
+        <Analyzer state={analyzer} />
+      )}
       <StatusBar
-        status={status}
         message={statusMessage}
-        tab={tab}
         sshLabel={sshMode ? (sshSpec?.destination ?? null) : null}
         tunnel={sshMode ? tunnel : null}
         hints={hints}
@@ -683,6 +823,3 @@ export function App({
     </Box>
   );
 }
-
-// Re-exported for the entrypoint to keep TriState import used.
-export type { TriState };

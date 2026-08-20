@@ -107,11 +107,16 @@ ExtensionLight:
   "manifestVersion": 2,
   "score": 74,
   "tags": ["HAS_BROWSER_POPUP", "USES_WEB_REQUEST"],
-  "hasMv3": true
+  "hasMv3": true,
+  "hasReport": false
 }
 ```
 
 `score` is the integer interestingness score. `tags` are the feature tags.
+`hasMv3` is true when an MV3 variant exists (the extension was migrated).
+`hasReport` is true when a report exists for the extension (it was tested).
+The client marks migrated rows and tested rows with distinct icons; the
+tested icon replaces the migrated one.
 
 ### extensions.get
 
@@ -244,19 +249,21 @@ Result:
 
 ReportDraft:
 
-| field            | type              | notes                              |
-|------------------|-------------------|------------------------------------|
-| extensionId      | string            |                                    |
-| tested           | boolean           | manual testing status              |
-| overallWorking   | boolean|null      | does it basically work             |
-| hasErrors        | boolean|null      | did you see errors                 |
-| seemsSlower      | boolean|null      | noticeably slower                  |
-| needsLogin       | boolean|null      | requires login to test             |
-| isPopupBroken    | boolean|null      | popup broken (when popup exists)   |
-| isSettingsBroken | boolean|null      | settings broken (when settings exist) |
-| isInteresting    | boolean|null      | interesting for research           |
-| notes            | string            | free text, may be empty            |
-| listeners        | ListenerTestResult[] | per-listener verdicts           |
+| field                    | type                | notes                                |
+|--------------------------|---------------------|--------------------------------------|
+| extensionId              | string              |                                      |
+| tested                   | boolean             | true for a submitted report          |
+| verificationDurationSecs | number|null         | seconds from form open to submit     |
+| installs                 | boolean|null        | does it install                      |
+| worksInMv2               | boolean|null        | does it work in MV2                  |
+| needsLogin               | boolean|null        | needs login to test                  |
+| isPopupWorking           | boolean|null        | popup works (when a popup exists)    |
+| isSettingsWorking        | boolean|null        | settings work (when settings exist)  |
+| isNewTabWorking          | boolean|null        | new tab works (when a new tab exists)|
+| isInteresting            | boolean|null        | interesting for research             |
+| overallWorking           | string|null         | yes | no | could_not_test         |
+| notes                    | string              | free text, may be empty              |
+| listeners                | ListenerTestResult[]| per-listener verdicts                |
 
 ListenerTestResult:
 
@@ -275,6 +282,90 @@ Full Report (reports.get result) adds:
 | createdAt | string | ISO-8601 UTC                   |
 | updatedAt | string | ISO-8601 UTC                   |
 
+## Host lifecycle (optional)
+
+Hosts with a `HostController` expose these methods. A host without one answers
+`host.*` with `-32601` (method not found).
+
+### host.status
+
+No params.
+
+```
+→ {"jsonrpc":"2.0","id":1,"method":"host.status"}
+← {"jsonrpc":"2.0","id":1,"result":{"status": HostStatus}}
+```
+
+HostStatus:
+
+```
+{
+  "state": "idle",
+  "extensionId": null,
+  "phase": null,
+  "startedAt": null,
+  "message": null
+}
+```
+
+- `state`: `idle | running | stopping`.
+- `phase`: host-specific free text. AgenticMigrator uses
+  `preparing | migrating | verifying | done | failed | stopped`.
+- `message`: short human summary of the last log tail, or null.
+
+### host.start
+
+Params: `{"id": "abc123"}`. Starts a job (migration) for the extension. An
+unknown id fails with `404`; a running job fails with `409`.
+
+Result: `{"status": HostStatus}`.
+
+### host.startAll
+
+No params. Starts a job over the whole corpus; the host decides which
+extensions are outstanding (AgenticMigrator: every source without a successful
+run). The host runs them in sequence, so `host.status` reports the current
+extension, and `phase`/`message` summarize the queue when it ends. An already
+running job fails with `409`.
+
+Result: `{"status": HostStatus}`.
+
+### host.stop
+
+No params. Aborts the running job. Returns `{"status": HostStatus}`.
+
+### host.log
+
+Params:
+
+| field  | type | default | notes                             |
+|--------|------|---------|-----------------------------------|
+| offset | int  | 0       | last `seq` the client already has |
+
+Result:
+
+```
+{
+  "lines": [ LogLine, ... ],
+  "nextOffset": 17
+}
+```
+
+- `lines` holds only entries with `seq > offset`, so the client polls and appends.
+- `nextOffset` is the largest `seq` emitted so far. Pass it back as the next
+  `offset`. It is `0` when no line was emitted yet.
+- Hosts that capture no structured log may return an empty result.
+
+LogLine:
+
+```
+{ "seq": 3, "ts": "2025-01-01T00:00:00.000Z", "stream": "stderr", "text": "boom" }
+```
+
+- `seq` is a monotonic per-run line number starting at 1.
+- `ts` is the ISO-8601 capture time, or null when unknown.
+- `stream` is `stdout | stderr`. stderr lines are typically errors.
+
 ## Documented future methods
 
 The server MUST answer these with `-32601` (method not found) in v1. The
@@ -286,5 +377,8 @@ protocol reserves their names so hosts can detect a newer client.
 
 ## Changelog
 
+- v5 — `ExtensionLight` gains `hasReport`: true when a report exists for the extension. The client marks migrated (`hasMv3`) and tested (`hasReport`) rows with distinct unicode icons; the tested icon replaces the migrated one.
+- v4 — the report form matches the ExtPorter form: installs, works in MV2, needs login, popup/settings/new-tab working, interesting, and a tri-state overall working verdict (yes/no/could_not_test). Legacy reports survive via field defaults; boolean overallWorking values normalize to the string form.
+- v3 — `host.log` adds incremental structured host logs (`seq`, `ts`, `stream`, `text`) with offset polling. The host lifecycle methods `host.status` / `host.start` / `host.stop` are documented; `host.log` joins them. `HostController.getLog` is optional; the SDK returns an empty result when a host omits it.
 - v2 — `extensions.list` page arrays cannot exceed 200 rows. Hosts must paginate; the SDK rejects oversized pages. Client requests one screen per page and debounces search. Manifest summaries gain an optional key-derived `id`; extension profiles gain an optional `mv2` summary. The SDK resolves `__MSG_...__` names and descriptions from `_locales`.
 - v1 — initial protocol: ping, extensions.list/get/files, reports.get/submit.

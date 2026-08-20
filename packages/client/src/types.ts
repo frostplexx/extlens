@@ -3,13 +3,15 @@ import type {
   ExtensionProfile,
   FileRefs,
   ListStats,
+  OverallWorking,
   Report,
   SortOrder,
 } from "@extlens/protocol";
 
 /** UI state types for the client. */
 
-export type Tab = "explorer" | "analyzer";
+/** Which screen the client shows. There is no tab bar; enter/esc move between explorer and analyzer. */
+export type View = "explorer" | "analyzer" | "log";
 
 export type ConnectionStatus = "connecting" | "connected" | "disconnected";
 
@@ -53,27 +55,29 @@ export interface AnalyzerState {
   mv3: BrowserState;
   /** True while the report form is open. */
   formOpen: boolean;
-  /** Missing browser waiting for a download decision, or null. */
-  prompt: { label: "mv2" | "mv3"; message: string } | null;
+  /** Missing browsers queued for a download decision (FIFO). */
+  prompts: { label: "mv2" | "mv3"; message: string }[];
+  /** First visible line index when the analyzer content is taller than the terminal. */
+  scroll: number;
 }
 
-export type TriState = boolean | null;
-
 export interface ReportDraftForm {
-  tested: TriState;
-  overallWorking: TriState;
-  hasErrors: TriState;
-  seemsSlower: TriState;
-  needsLogin: TriState;
-  isPopupBroken: TriState;
-  isSettingsBroken: TriState;
-  isInteresting: TriState;
+  installs: boolean;
+  worksInMv2: boolean;
+  needsLogin: boolean;
+  isPopupWorking: boolean;
+  isSettingsWorking: boolean;
+  isNewTabWorking: boolean;
+  isInteresting: boolean;
+  overallWorking: OverallWorking;
   notes: string;
   listenerStatus: ("untested" | "yes" | "no")[];
-  /** Index of the focused row; notes is the last row. */
+  /** Index of the focused row in the visible row list. */
   cursor: number;
   notesFocused: boolean;
   saving: boolean;
   savedId: string | null;
   error: string | null;
+  /** Date.now() when the form opened, for the auto-collected duration. */
+  verificationStart: number;
 }

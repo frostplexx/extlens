@@ -1,5 +1,6 @@
 import type {
   FileRefs,
+  HostLogResult,
   HostStatus,
   ListParams,
   ListResult,
@@ -37,8 +38,15 @@ export interface HostController {
   getStatus(): Promise<HostStatus>;
   /** Start a job for the extension. Throws when busy or the id is unknown. */
   start(id: string): Promise<HostStatus>;
+  /** Start a job over the whole corpus (all outstanding extensions). Optional: hosts without it answer -32601 for host.startAll. */
+  startAll?(): Promise<HostStatus>;
   /** Abort the running job. No-op (returns status) when idle. */
   stop(): Promise<HostStatus>;
+  /**
+   * Incremental host log lines with seq > offset. Optional for backward
+   * compatibility: hosts without it get an empty result from the SDK.
+   */
+  getLog?(offset: number): Promise<HostLogResult>;
 }
 
 export interface Backend {

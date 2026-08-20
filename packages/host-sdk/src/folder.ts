@@ -295,7 +295,7 @@ class FolderBackendImpl implements Backend {
       | undefined) ?? null;
   }
 
-  private rowToLight(row: ExtensionRow): ExtensionLight {
+  private rowToLight(row: ExtensionRow, hasReport: boolean): ExtensionLight {
     return {
       id: row.id,
       name: row.name,
@@ -304,6 +304,7 @@ class FolderBackendImpl implements Backend {
       score: row.score,
       tags: JSON.parse(row.tags) as string[],
       hasMv3: false,
+      hasReport,
     };
   }
 
@@ -351,8 +352,14 @@ class FolderBackendImpl implements Backend {
       avg: number | null;
       mv3: number | null;
     };
+    // One query for the report set: any extension with a report counts as tested.
+    const reported = new Set(
+      (this.db.prepare("SELECT extension_id FROM reports").all() as {
+        extension_id: string;
+      }[]).map((r) => r.extension_id),
+    );
     return {
-      extensions: pageRows.map((r) => this.rowToLight(r)),
+      extensions: pageRows.map((r) => this.rowToLight(r, reported.has(r.id))),
       stats: {
         total,
         analyzed: total,

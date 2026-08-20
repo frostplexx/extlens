@@ -3,13 +3,16 @@ import type {
   ExtensionLightSchema,
   ExtensionProfileSchema,
   FileRefsSchema,
+  HostLogResultSchema,
   HostStatusSchema,
   ListParamsSchema,
   ListResultSchema,
   ListStatsSchema,
   ListenerSchema,
+  LogLineSchema,
   ListenerTestResultSchema,
   ManifestSummarySchema,
+  OverallWorkingSchema,
   ReportDraftSchema,
   ReportSchema,
   ScoreBreakdownSchema,
@@ -33,5 +36,8 @@ export type SortOrder = z.infer<typeof SortOrderSchema>;
 export type ListResult = z.infer<typeof ListResultSchema>;
 export type ReportDraft = z.infer<typeof ReportDraftSchema>;
 export type Report = z.infer<typeof ReportSchema>;
+export type OverallWorking = z.infer<typeof OverallWorkingSchema>;
 export type ListenerTestResult = z.infer<typeof ListenerTestResultSchema>;
 export type HostStatus = z.infer<typeof HostStatusSchema>;
+export type LogLine = z.infer<typeof LogLineSchema>;
+export type HostLogResult = z.infer<typeof HostLogResultSchema>;

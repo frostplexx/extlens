@@ -1,46 +1,88 @@
 import React, { useState } from "react";
-import { Box, Text, useInput } from "ink";
-import type { ReportDraftForm, TriState } from "../types.js";
+import { Box, Text, useInput, useStdout } from "ink";
+import type { ReportDraftForm } from "../types.js";
+import { c } from "../theme.js";
 import { Cursor } from "./ui.js";
 
 /**
- * Manual test report form. Rows: tri-state booleans, a notes input, then one
- * row per listener. Owns its key handling; the app unmounts it when closed.
- * Row layout is shared with app.tsx via the exported constants.
+ * Manual test report form, matching the ExtPorter report form field set:
+ * listeners first, then Installs, Works in MV2, Needs Login, the conditional
+ * Popup / Settings / New Tab fields, Is Interesting, Overall Working, Notes,
+ * and Submit. Conditional rows appear only when the manifest declares them.
  */
 
-export const BOOLEAN_KEYS = [
-  "tested",
-  "overallWorking",
-  "hasErrors",
-  "seemsSlower",
-  "needsLogin",
-  "isPopupBroken",
-  "isSettingsBroken",
-  "isInteresting",
-] as const;
+export type BooleanField =
+  | "installs"
+  | "worksInMv2"
+  | "needsLogin"
+  | "isPopupWorking"
+  | "isSettingsWorking"
+  | "isNewTabWorking"
+  | "isInteresting";
 
-const BOOLEAN_LABELS: Record<(typeof BOOLEAN_KEYS)[number], string> = {
-  tested: "tested",
-  overallWorking: "overall working",
-  hasErrors: "errors seen",
-  seemsSlower: "seems slower",
-  needsLogin: "needs login",
-  isPopupBroken: "popup broken",
-  isSettingsBroken: "settings broken",
-  isInteresting: "interesting",
+export type FormRow =
+  | { kind: "boolean"; field: BooleanField }
+  | { kind: "overall" }
+  | { kind: "notes" }
+  | { kind: "submit" }
+  | { kind: "listener"; index: number };
+
+/** Visible row order: listeners, then the ExtPorter quick assessment. */
+export function buildReportRows(opts: {
+  hasPopup: boolean;
+  hasSettings: boolean;
+  isNewTab: boolean;
+  listenerCount: number;
+}): FormRow[] {
+  const rows: FormRow[] = [];
+  for (let i = 0; i < opts.listenerCount; i += 1) rows.push({ kind: "listener", index: i });
+  rows.push({ kind: "boolean", field: "installs" });
+  rows.push({ kind: "boolean", field: "worksInMv2" });
+  rows.push({ kind: "boolean", field: "needsLogin" });
+  if (opts.hasPopup) rows.push({ kind: "boolean", field: "isPopupWorking" });
+  if (opts.hasSettings) rows.push({ kind: "boolean", field: "isSettingsWorking" });
+  if (opts.isNewTab) rows.push({ kind: "boolean", field: "isNewTabWorking" });
+  rows.push({ kind: "boolean", field: "isInteresting" });
+  rows.push({ kind: "overall" });
+  rows.push({ kind: "notes" });
+  rows.push({ kind: "submit" });
+  return rows;
+}
+
+const BOOLEAN_LABELS: Record<BooleanField, string> = {
+  installs: "Installs",
+  worksInMv2: "Works in MV2",
+  needsLogin: "Needs Login",
+  isPopupWorking: "Is Popup Working",
+  isSettingsWorking: "Is Settings Working",
+  isNewTabWorking: "Is New Tab Working",
+  isInteresting: "Is Interesting",
 };
 
-export const NOTE_ROW_INDEX = BOOLEAN_KEYS.length;
-export const LISTENER_START = NOTE_ROW_INDEX + 1;
+const OVERALL_LABELS: Record<"yes" | "no" | "could_not_test", string> = {
+  yes: "Yes",
+  no: "No",
+  could_not_test: "Could not test",
+};
 
-function triLabel(value: TriState): string {
-  if (value === null) return "-";
-  return value ? "yes" : "no";
+const LISTENER_STATUS_LABELS: Record<"untested" | "yes" | "no", string> = {
+  yes: "works",
+  no: "doesn't work",
+  untested: "untested",
+};
+
+/** Auto-collected header data (extension ids and verification timing). */
+export interface ReportAutoInfo {
+  name: string;
+  mv2Id: string | null;
+  mv3Id: string | null;
+  elapsedSecs: number | null;
 }
 
 export function ReportForm({
   form,
+  rows,
+  auto,
   onCycle,
   onMove,
   onToggleNotes,
@@ -50,6 +92,8 @@ export function ReportForm({
   listenerApis,
 }: {
   form: ReportDraftForm;
+  rows: FormRow[];
+  auto: ReportAutoInfo;
   onCycle: (delta: 1 | -1) => void;
   onMove: (delta: 1 | -1) => void;
   onToggleNotes: () => void;
@@ -69,6 +113,10 @@ export function ReportForm({
         onToggleNotes();
         return;
       }
+      if (key.ctrl && input === "u") {
+        setNotesDraft("");
+        return;
+      }
       if (key.backspace || key.delete) {
         setNotesDraft(notesDraft.slice(0, -1));
         return;
@@ -82,11 +130,17 @@ export function ReportForm({
       return;
     }
     if (key.return) {
-      if (form.cursor === NOTE_ROW_INDEX) onToggleNotes();
+      const row = rows[form.cursor];
+      if (row?.kind === "notes") onToggleNotes();
+      else if (row?.kind === "submit") onSubmit();
       return;
     }
-    if (key.upArrow || key.downArrow) {
-      onMove(key.upArrow ? -1 : 1);
+    if (key.upArrow || input === "k") {
+      onMove(-1);
+      return;
+    }
+    if (key.downArrow || input === "j") {
+      onMove(1);
       return;
     }
     if (key.leftArrow || key.rightArrow || input === " ") {
@@ -96,80 +150,141 @@ export function ReportForm({
     if (input === "s" || input === "S") onSubmit();
   });
 
-  return (
-    <Box flexDirection="column" borderStyle="round" borderColor="blue" paddingX={1}>
-      <Text>
-        <Text bold>manual test report</Text>
-        <Text dimColor> — {form.saving ? "saving…" : form.savedId ? `saved as ${form.savedId}` : "unsaved"}</Text>
-      </Text>
-      <Box flexDirection="column" marginTop={1}>
-        {BOOLEAN_KEYS.map((field, i) => {
-          const focused = i === form.cursor;
-          return (
-            <Text key={field}>
-              <Cursor selected={focused} />
-              <Text dimColor>{BOOLEAN_LABELS[field].padEnd(18)}</Text>
-              <Text color={focused ? "cyan" : undefined} bold={focused}>
-                {triLabel(form[field]).padEnd(4)}
-              </Text>
-              {focused ? <Text dimColor>← space/←/→ cycle</Text> : null}
-            </Text>
-          );
-        })}
-
-        <Text>
-          <Cursor selected={form.cursor === NOTE_ROW_INDEX} />
-          <Text dimColor>{"notes".padEnd(18)}</Text>
+  const renderRow = (row: FormRow, i: number) => {
+    const focused = i === form.cursor;
+    if (row.kind === "listener") {
+      const listener = listenerApis[row.index];
+      const status = form.listenerStatus[row.index] ?? "untested";
+      return (
+        <Text key={`listener-${row.index}`}>
+          <Cursor selected={focused} />
+          <Text dimColor>{String(row.index + 1).padStart(2)}) </Text>
+          <Text>{listener?.api ?? "?"}</Text>
+          <Text dimColor> {listener?.file ?? ""}</Text>
+          <Text>  </Text>
+          <Text color={focused ? c.accent : undefined} bold={focused}>
+            {LISTENER_STATUS_LABELS[status]}
+          </Text>
+        </Text>
+      );
+    }
+    if (row.kind === "boolean") {
+      return (
+        <Text key={row.field}>
+          <Cursor selected={focused} />
+          <Text dimColor>{BOOLEAN_LABELS[row.field].padEnd(20)}</Text>
+          <Text color={focused ? c.accent : undefined} bold={focused}>
+            {form[row.field] ? "Yes" : "No"}
+          </Text>
+          {focused ? <Text dimColor>  space/←/→ toggle</Text> : null}
+        </Text>
+      );
+    }
+    if (row.kind === "overall") {
+      return (
+        <Text key="overall">
+          <Cursor selected={focused} />
+          <Text dimColor>{"Overall Working".padEnd(20)}</Text>
+          <Text color={focused ? c.accent : undefined} bold={focused}>
+            {OVERALL_LABELS[form.overallWorking]}
+          </Text>
+          {focused ? <Text dimColor>  space/←/→ cycle</Text> : null}
+        </Text>
+      );
+    }
+    if (row.kind === "notes") {
+      return (
+        <Text key="notes">
+          <Cursor selected={focused} />
+          <Text dimColor>{"Notes (optional)".padEnd(20)}</Text>
           {form.notesFocused ? (
-            <Text color="cyan">{notesDraft}▌</Text>
+            <Text color={c.accent}>{notesDraft}▌</Text>
           ) : (
-            <Text color={form.cursor === NOTE_ROW_INDEX ? "cyan" : undefined}>
-              {form.notes || "—"}
-            </Text>
+            <Text color={focused ? c.accent : undefined}>{form.notes || "—"}</Text>
           )}
-          {form.cursor === NOTE_ROW_INDEX && !form.notesFocused ? (
-            <Text dimColor>  enter to edit</Text>
-          ) : null}
+          {focused && !form.notesFocused ? <Text dimColor>  enter to edit</Text> : null}
         </Text>
-      </Box>
-
-      <Box marginTop={1}>
-        <Text dimColor>{"─".repeat(28)}</Text>
-      </Box>
-
-      <Box flexDirection="column" marginTop={1}>
-        <Text bold underline>
-          listeners
+      );
+    }
+    return (
+      <Text key="submit">
+        <Cursor selected={focused} />
+        <Text color={focused ? c.success : undefined} bold={focused}>
+          Submit
         </Text>
-        {listenerApis.map((l, i) => {
-          const row = LISTENER_START + i;
-          const status = form.listenerStatus[i] ?? "untested";
-          const focused = row === form.cursor;
-          return (
-            <Text key={`${l.api}:${l.file}`}>
-              <Cursor selected={focused} />
-              <Text dimColor>{String(i + 1).padStart(2)}) </Text>
-              <Text>{l.api}</Text>
-              <Text dimColor> {l.file}</Text>
-              <Text>  </Text>
-              <Text color={focused ? "cyan" : undefined} bold={focused}>
-                {status}
-              </Text>
-            </Text>
-          );
-        })}
-      </Box>
+        <Text dimColor>  (enter)</Text>
+      </Text>
+    );
+  };
 
-      <Box marginTop={1}>
-        {form.saving ? (
-          <Text dimColor>saving…</Text>
-        ) : form.savedId ? (
-          <Text color="green">saved as {form.savedId} — esc to close</Text>
-        ) : (
-          <Text dimColor>s submit · esc cancel · ↑/↓ move · space/←/→ cycle (− → yes → no)</Text>
-        )}
-        {form.error ? <Text color="red">  {form.error}</Text> : null}
-      </Box>
+  const { stdout } = useStdout();
+  const termRows = stdout.rows ?? 24;
+  const cols = stdout.columns ?? 80;
+  const visible = Math.max(6, termRows - 6);
+
+  const header: React.ReactNode[] = [
+    <Text key="h-title">
+      <Text bold>manual test report</Text>
+      <Text dimColor>
+        {" "}
+        — {form.saving ? "saving…" : form.savedId ? `saved as ${form.savedId}` : "unsaved"}
+      </Text>
+    </Text>,
+    <Text key="h-gap"> </Text>,
+    <Text key="h-name">
+      <Text bold>Extension: </Text>
+      {auto.name}
+    </Text>,
+    <Text key="h-mv2">
+      <Text bold>MV2 ID: </Text>
+      {auto.mv2Id ?? "N/A"}
+    </Text>,
+    <Text key="h-mv3">
+      <Text bold>MV3 ID: </Text>
+      {auto.mv3Id ?? "N/A"}
+    </Text>,
+    <Text key="h-time">
+      <Text bold>Verification Time: </Text>
+      {auto.elapsedSecs === null ? "not started" : `${auto.elapsedSecs.toFixed(1)}s`}
+    </Text>,
+    <Text key="h-rule" dimColor>
+      {"─".repeat(Math.max(10, cols - 4))}
+    </Text>,
+  ];
+
+  const footer: React.ReactNode[] = [
+    <Text key="f-status">
+      {form.saving ? (
+        <Text dimColor>saving…</Text>
+      ) : form.savedId ? (
+        <Text color={c.success}>saved as {form.savedId} — esc to close</Text>
+      ) : (
+        <Text dimColor>s submit · esc cancel · ↑/↓ j/k move · space/←/→ cycle</Text>
+      )}
+      {form.error ? <Text color={c.danger}>  {form.error}</Text> : null}
+    </Text>,
+  ];
+
+  const body = rows.map(renderRow);
+  const fixed = header.length + footer.length;
+  const available = Math.max(3, visible - fixed);
+  const overflowing = body.length > available;
+  const rowWindow = overflowing ? available - 1 : available;
+  const focus = form.cursor;
+  let start = Math.max(0, focus - Math.floor(rowWindow / 2));
+  start = Math.min(start, Math.max(0, body.length - rowWindow));
+  const shownBody = body.slice(start, start + rowWindow);
+
+  return (
+    <Box flexDirection="column">
+      {header}
+      {shownBody}
+      {overflowing ? (
+        <Text color={c.muted}>
+          … {start + 1}-{start + rowWindow}/{body.length} form rows · ↑/↓ moves the cursor
+        </Text>
+      ) : null}
+      {footer}
     </Box>
   );
 }

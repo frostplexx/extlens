@@ -16,6 +16,11 @@ computes profiles with a pure analyzer. The client never touches host storage.
   report form).
 - A real adapter: AgenticMigrator (`src/extlens/` in that repo) serves its
   `run/` outputs.
+- Folder mode: `extlens serve <folder>` ingests a plain directory of
+  extensions into SQLite and serves it standalone, with no host project.
+- Batch migration: AgenticMigrator's CLI auto-detects a corpus
+  (`migrate ./corpus --out ./mv3-output`) and migrates every MV2 source into
+  one output root.
 - SSH mode: the client tunnels the WebSocket to a remote host and proxies its
   file refs, so a remote AgenticMigrator host works like a local one.
 
@@ -73,11 +78,16 @@ npm run client -- --ssh user@host --remote-port 8081
 
 ## Client keybindings
 
-- `/` — focus search
+- `?` — keyboard help overlay
+- `/` — focus search; `ctrl+u` clears it; `esc` closes it
 - `s` — cycle sort (interestingness desc / asc / name)
-- arrows — select an extension
+- `↑`/`↓` or `j`/`k` — select an extension; `g`/`G` jump to first/last
 - `enter` — open the analyzer tab
-- `tab` — switch tabs
+- `tab` — switch explorer ⇄ analyzer
+- `n`/`p` or PgUp/PgDn — previous / next page
+- `b` / `x` — launch / close test browsers (analyzer)
+- `r` — record a manual test report (analyzer)
+- `l` — host log; `m` — migrate / stop a host job (explorer)
 - `q` — quit
 
 Client environment:
@@ -136,5 +146,6 @@ fixtures/           — synthetic extensions with hand-computed golden scores
 ## Status
 
 Implemented: protocol, analyzer, host SDK, client (explorer + analyzer tabs),
-AgenticMigrator adapter, SSH mode, docs. Not implemented: ExtPorter adapter (see
-ADAPTERS.md), phase 2 folder mode (SQLite `FolderBackend`, `extlens serve`).
+AgenticMigrator adapter, SSH mode, folder mode (SQLite `FolderBackend`,
+`extlens serve`), AgenticMigrator batch migration (`--batch`), docs. Not
+implemented: ExtPorter adapter (see ADAPTERS.md).

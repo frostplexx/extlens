@@ -5,6 +5,7 @@ import {
   ExtensionLightSchema,
   ExtensionProfileSchema,
   FileRefsSchema,
+  HostLogParamsSchema,
   HostStartParamsSchema,
   HostStatusSchema,
   ListParamsSchema,
@@ -25,6 +26,7 @@ const light = {
   score: 74,
   tags: ["HAS_BROWSER_POPUP", "USES_WEB_REQUEST"],
   hasMv3: true,
+  hasReport: false,
 };
 
 const breakdown = {
@@ -175,6 +177,11 @@ describe("extensions.list result", () => {
   test("rejects a light without a score", () => {
     expect(() => ExtensionLightSchema.parse({ ...light, score: undefined })).toThrow();
   });
+
+  test("rejects a light without hasReport", () => {
+    const { hasReport: _hasReport, ...missing } = light;
+    expect(() => ExtensionLightSchema.parse(missing)).toThrow();
+  });
 });
 
 describe("extensions.get result", () => {
@@ -221,13 +228,15 @@ describe("reports", () => {
   const draft = {
     extensionId: "abc123",
     tested: true,
-    overallWorking: true,
-    hasErrors: false,
-    seemsSlower: false,
+    verificationDurationSecs: 10,
+    installs: true,
+    worksInMv2: true,
     needsLogin: true,
-    isPopupBroken: false,
-    isSettingsBroken: false,
+    isPopupWorking: false,
+    isSettingsWorking: true,
+    isNewTabWorking: null,
     isInteresting: true,
+    overallWorking: "could_not_test",
     notes: "looks good",
     listeners: [
       { api: "chrome.runtime.onMessage", file: "background.js", line: 1, status: "yes" },
@@ -313,5 +322,30 @@ describe("host lifecycle", () => {
 
   test("host.stop takes no params", () => {
     expect(MethodsSchema["host.stop"].params).toBeUndefined();
+  });
+
+  test("host.startAll takes no params and returns a status", () => {
+    expect(MethodsSchema["host.startAll"].params).toBeUndefined();
+    expect(MethodsSchema["host.startAll"].result.parse({ status })).toEqual({ status });
+  });
+
+  test("host.log params default offset to 0 and reject negatives", () => {
+    expect(HostLogParamsSchema.parse({})).toEqual({ offset: 0 });
+    expect(HostLogParamsSchema.parse({ offset: 3 })).toEqual({ offset: 3 });
+    expect(() => HostLogParamsSchema.parse({ offset: -1 })).toThrow();
+  });
+
+  test("host.log result round-trips lines and nextOffset", () => {
+    const result = {
+      lines: [{ seq: 1, ts: "2025-01-01T00:00:00.000Z", stream: "stderr", text: "boom" }],
+      nextOffset: 1,
+    };
+    expect(MethodsSchema["host.log"].result.parse(result)).toEqual(result);
+    expect(() =>
+      MethodsSchema["host.log"].result.parse({
+        lines: [{ seq: 0, ts: null, stream: "stdout", text: "" }],
+        nextOffset: 0,
+      }),
+    ).toThrow();
   });
 });

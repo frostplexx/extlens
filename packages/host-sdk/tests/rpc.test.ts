@@ -103,13 +103,15 @@ describe("reports", () => {
   const draft = {
     extensionId: "one-ext",
     tested: true,
-    overallWorking: true,
-    hasErrors: false,
-    seemsSlower: false,
+    verificationDurationSecs: 5,
+    installs: true,
+    worksInMv2: true,
     needsLogin: false,
-    isPopupBroken: false,
-    isSettingsBroken: false,
+    isPopupWorking: true,
+    isSettingsWorking: null,
+    isNewTabWorking: null,
     isInteresting: true,
+    overallWorking: "yes",
     notes: "round trip",
     listeners: [{ api: "chrome.runtime.onMessage", file: "background.js", line: 1, status: "yes" }],
   };
@@ -247,6 +249,23 @@ describe("host.status / host.start / host.stop", () => {
     expect(res).toEqual({ result: { status: { state: "idle", extensionId: null, phase: null, startedAt: null, message: null } } });
   });
 
+  test("host.startAll calls the controller and returns the status", async () => {
+    const res = await call(
+      hostBackend({
+        async startAll() {
+          return { ...running, extensionId: "all" };
+        },
+      }),
+      "host.startAll",
+    );
+    expect(res).toEqual({ result: { status: { ...running, extensionId: "all" } } });
+  });
+
+  test("host.startAll without a controller startAll -> -32601", async () => {
+    const res = await call(hostBackend(), "host.startAll");
+    expect(res).toEqual({ error: { code: ErrorCodes.METHOD_NOT_FOUND, message: expect.stringContaining("startAll") } });
+  });
+
   test("backend without a host controller -> -32601", async () => {
     const backend = makeStubBackend();
     delete backend.host;
@@ -257,5 +276,53 @@ describe("host.status / host.start / host.stop", () => {
   test("invalid params -> -32602", async () => {
     const res = await call(hostBackend(), "host.start", { id: 42 });
     expect(res).toEqual({ error: { code: ErrorCodes.INVALID_PARAMS, message: expect.any(String) } });
+  });
+
+  test("host.log returns lines after the offset and nextOffset", async () => {
+    const backend = hostBackend({
+      async getLog(offset) {
+        return {
+          lines: [
+            { seq: 3, ts: "t3", stream: "stdout", text: "third" },
+            { seq: 4, ts: "t4", stream: "stderr", text: "fourth" },
+          ],
+          nextOffset: 4,
+        };
+      },
+    });
+    const res = await call(backend, "host.log", { offset: 2 });
+    expect(res).toEqual({
+      result: {
+        lines: [
+          { seq: 3, ts: "t3", stream: "stdout", text: "third" },
+          { seq: 4, ts: "t4", stream: "stderr", text: "fourth" },
+        ],
+        nextOffset: 4,
+      },
+    });
+  });
+
+  test("host.log without a getLog controller returns empty", async () => {
+    const res = await call(hostBackend(), "host.log", { offset: 5 });
+    expect(res).toEqual({ result: { lines: [], nextOffset: 5 } });
+  });
+
+  test("host.log defaults offset to 0", async () => {
+    let seen: unknown;
+    const backend = hostBackend({
+      async getLog(offset) {
+        seen = offset;
+        return { lines: [], nextOffset: 0 };
+      },
+    });
+    await call(backend, "host.log");
+    expect(seen).toEqual(0);
+  });
+
+  test("host.log without a host controller -> -32601", async () => {
+    const backend = makeStubBackend();
+    delete backend.host;
+    const res = await call(backend, "host.log");
+    expect(res).toEqual({ error: { code: ErrorCodes.METHOD_NOT_FOUND, message: expect.stringContaining("not supported") } });
   });
 });
