@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Box, Text, useApp, useInput, useStdout } from "ink";
 import type {
+  ExtensionLight,
   ExtensionProfile,
   FileRefs,
   HostLogResult,
@@ -379,26 +380,79 @@ export function App({
     [client, sshMode],
   );
 
+  const showExtension = useCallback(
+    (light: ExtensionLight) => {
+      setView("analyzer");
+      setExplorer((e) => ({ ...e, selectedIndex: Math.max(0, e.lights.indexOf(light)) }));
+      setAnalyzer((a) => ({
+        ...a,
+        id: light.id,
+        profile: null,
+        files: null,
+        report: null,
+        loading: true,
+        error: null,
+        formOpen: false,
+        mv2: IDLE_BROWSER,
+        mv3: IDLE_BROWSER,
+        prompts: [],
+        scroll: 0,
+      }));
+      void loadProfile(light.id);
+    },
+    [loadProfile],
+  );
+
   const openAnalyzer = useCallback(() => {
     const light = explorer.lights[explorer.selectedIndex];
-    if (!light) return;
-    setView("analyzer");
-    setAnalyzer((a) => ({
-      ...a,
-      id: light.id,
-      profile: null,
-      files: null,
-      report: null,
-      loading: true,
-      error: null,
-      formOpen: false,
-      mv2: IDLE_BROWSER,
-      mv3: IDLE_BROWSER,
-      prompts: [],
-      scroll: 0,
-    }));
-    void loadProfile(light.id);
-  }, [explorer.lights, explorer.selectedIndex, loadProfile]);
+    if (light) showExtension(light);
+  }, [explorer.lights, explorer.selectedIndex, showExtension]);
+
+  /**
+   * Advance to the next extension, rolling onto the next page when the last
+   * row of the current page is reached. Returns false when there is no next
+   * extension (end of the last page).
+   */
+  const advanceAnalyzer = useCallback(
+    async (currentId: string): Promise<boolean> => {
+      const idx = explorer.lights.findIndex((l) => l.id === currentId);
+      const next = explorer.lights[idx + 1];
+      if (next) {
+        void browsersRef.current.closeAll();
+        showExtension(next);
+        return true;
+      }
+      // End of the current page: jump to the first extension of the next page.
+      if (explorer.page >= explorer.totalPages) return false;
+      if (!client) return false;
+      const nextPage = explorer.page + 1;
+      try {
+        const result = await client.call<ListResult>("extensions.list", {
+          page: nextPage,
+          pageSize,
+          search: debouncedSearch || undefined,
+          sort: explorer.sort,
+        });
+        const first = result.extensions[0];
+        if (!first) return false;
+        // Keep the explorer list in sync so returning there shows the right page.
+        setExplorer((e) => ({
+          ...e,
+          page: nextPage,
+          lights: result.extensions.slice(0, pageSize),
+          stats: result.stats,
+          totalPages: result.totalPages,
+          selectedIndex: 0,
+        }));
+        await browsersRef.current.closeAll();
+        showExtension(first);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [explorer.lights, explorer.page, explorer.totalPages, explorer.sort, pageSize, debouncedSearch, client, showExtension],
+  );
 
   const launchOne = useCallback(
     (label: "mv2" | "mv3", executable: string, extensionPath: string) => {
@@ -584,14 +638,18 @@ export function App({
     };
     void client
       .call<{ id: string }>("reports.submit", { report: draft })
-      .then((res) => {
-        setForm((x) => (x ? { ...x, saving: false, savedId: res.id } : x));
-        void loadProfile(id);
+      .then(async (res) => {
+        if (await advanceAnalyzer(id)) {
+          setForm(null);
+        } else {
+          setForm((x) => (x ? { ...x, saving: false, savedId: res.id } : x));
+          void loadProfile(id);
+        }
       })
       .catch((error: Error) => {
         setForm((x) => (x ? { ...x, saving: false, error: error.message } : x));
       });
-  }, [form, analyzer.id, analyzer.profile, client, loadProfile]);
+  }, [form, analyzer.id, analyzer.profile, client, loadProfile, advanceAnalyzer]);
 
   useInput((input, key) => {
     if (passwordPrompt) {
