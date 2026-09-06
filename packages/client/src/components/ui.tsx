@@ -83,11 +83,47 @@ export function Section({
   );
 }
 
-/** Rows available for the explorer list, given the terminal height. */
+/**
+ * Rows of chrome around the explorer list.
+ *   normal:  menu bar (3), stats (1), search bar + margins (5), panel title + borders (3),
+ *            column header (1), status bar with margin (3)
+ *   compact: the same without the blank margins around the search bar and status bar.
+ */
+const CHROME_ROWS = 16;
+const CHROME_ROWS_COMPACT = 13;
+
+/** Below this the frame cannot fit even one list row, so we show a notice instead. */
+export const MIN_ROWS = CHROME_ROWS_COMPACT + 1;
+
+/** True when the terminal is short enough that the blank spacer rows must go. */
+export function isCompact(rows?: number): boolean {
+  return (rows ?? 24) < CHROME_ROWS + 5;
+}
+
+/**
+ * Rows available for the explorer list, given the terminal height.
+ *
+ * The floor is ONE row, not five: a five-row minimum meant the frame was always at least
+ * 21 rows tall, so every terminal shorter than that rendered a UI taller than the screen and
+ * the top scrolled away. Short terminals now drop spacer rows and shrink the list instead.
+ */
 export function listPageSize(rows?: number): number {
-  // Fixed chrome: menu bar (3), stats row (1), search bar + margins (5),
-  // list panel title + borders (3), status bar (3).
-  return Math.max(5, Math.min(40, (rows ?? 24) - 15));
+  const chrome = isCompact(rows) ? CHROME_ROWS_COMPACT : CHROME_ROWS;
+  return Math.max(1, Math.min(40, (rows ?? 24) - chrome));
+}
+
+/** Shown instead of a broken frame when the terminal cannot fit the UI. */
+export function TooSmall({ rows, columns }: { rows: number; columns: number }) {
+  return (
+    <Box flexDirection="column" paddingX={1}>
+      <Text color={c.warning} bold>
+        terminal too small
+      </Text>
+      <Text color={c.muted}>
+        {columns}×{rows} — extlens needs at least {MIN_ROWS} rows. Resize, or press q to quit.
+      </Text>
+    </Box>
+  );
 }
 
 /**
@@ -125,8 +161,48 @@ export function Cursor({ selected }: { selected: boolean }) {
 }
 
 /** Distinct error line. */
+/**
+ * Condense an error for display. Protocol failures arrive as `"<code>: <message>"` where the
+ * message can be a pretty-printed zod issue array — dozens of lines of JSON that filled the
+ * whole list panel, one token per line, and buried what actually went wrong. Pull out the
+ * field paths and state them in one line instead.
+ */
+export function formatError(raw: string): string {
+  const codeMatch = /^(-?\d+):\s*/.exec(raw);
+  const code = codeMatch ? codeMatch[1] : null;
+  const body = codeMatch ? raw.slice(codeMatch[0].length) : raw;
+
+  let detail = body.trim();
+  if (detail.startsWith("[") || detail.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(detail);
+      const issues = (Array.isArray(parsed) ? parsed : [parsed]) as {
+        path?: (string | number)[];
+        message?: string;
+      }[];
+      const described = issues
+        .filter((i) => i && (i.path || i.message))
+        .map((i) => `${(i.path ?? []).join(".") || "response"}: ${i.message ?? "invalid"}`);
+      if (described.length) {
+        const [first, ...rest] = described;
+        detail = rest.length ? `${first} (+${rest.length} more)` : first;
+      }
+    } catch {
+      // Not JSON after all — fall through and show the raw text, collapsed below.
+    }
+  }
+  // Any remaining multi-line text collapses to its first meaningful line: the panel is one
+  // row tall for errors, so extra lines only push the rest of the UI around.
+  detail = detail.split("\n").map((l) => l.trim()).filter(Boolean)[0] ?? detail;
+  return code ? `${code} ${detail}` : detail;
+}
+
 export function ErrorLine({ message }: { message: string }) {
-  return <Text color={c.danger}>✗ {message}</Text>;
+  return (
+    <Text color={c.danger} wrap="truncate-end">
+      ✗ {formatError(message)}
+    </Text>
+  );
 }
 
 /** Distinct empty-state line. */
@@ -210,7 +286,9 @@ export function LogView({
     return <Text color={c.danger}>host error: {error}</Text>;
   }
   // Tail the log to the terminal: keep the newest lines that fit, note the rest.
-  const visible = Math.max(5, (stdout.rows ?? 24) - 11);
+  // Floor of 1, not 5: a five-row floor made the log frame 16 rows tall regardless of the
+  // terminal, so short terminals lost the top of the UI off screen.
+  const visible = Math.max(1, (stdout.rows ?? 24) - 11);
   const shown = lines.slice(-visible);
   const omitted = lines.length - shown.length;
   const fallback = lines.length === 0 ? status?.message : null;
@@ -328,6 +406,16 @@ const HELP_GROUPS: [string, [string, string][]][] = [
       ["l", "host log"],
       ["?", "this help"],
       ["q", "quit"],
+    ],
+  ],
+  // The list's status column is a single glyph with no room for a label, so the only place
+  // its meaning can live is here.
+  [
+    "list markers",
+    [
+      ["✓", "a report has been recorded"],
+      ["↑", "an MV3 migration exists (no report yet)"],
+      ["score", "interestingness: green high, yellow medium, red low"],
     ],
   ],
 ];

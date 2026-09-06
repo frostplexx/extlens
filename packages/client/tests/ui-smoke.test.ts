@@ -6,7 +6,7 @@ import type { ExtensionLight, ListStats } from "@extlens/protocol";
 import { Explorer } from "../src/components/explorer.js";
 import { Analyzer } from "../src/components/analyzer.js";
 import { StatusBar } from "../src/components/status-bar.js";
-import { TopBar, HostStatusView, LogView, HelpView, listPageSize } from "../src/components/ui.js";
+import { TopBar, HostStatusView, LogView, HelpView, listPageSize, formatError, isCompact, MIN_ROWS } from "../src/components/ui.js";
 import type { AnalyzerState, ExplorerState } from "../src/types.js";
 
 /**
@@ -129,10 +129,25 @@ const analyzerState: AnalyzerState = {
 
 describe("ui rendering", () => {
   it("sizes list pages to the terminal", () => {
-    expect(listPageSize(24)).toBe(9);
-    expect(listPageSize(50)).toBe(35);
-    expect(listPageSize(10)).toBe(5);
-    expect(listPageSize(undefined)).toBe(9);
+    // One row smaller than before: the list panel now carries a column-header row.
+    expect(listPageSize(24)).toBe(8);
+    expect(listPageSize(50)).toBe(34);
+    expect(listPageSize(undefined)).toBe(8);
+    // Short terminals switch to compact chrome and may shrink to a single row. The old
+    // five-row floor forced a 21-row frame, which overflowed every terminal below that.
+    expect(listPageSize(20)).toBe(7);
+    expect(listPageSize(14)).toBe(1);
+    expect(listPageSize(10)).toBe(1);
+  });
+
+  it("keeps the whole frame within the terminal height", () => {
+    // Regression: the frame was always >= 21 rows, so anything shorter scrolled its own
+    // top off screen. chrome + list must never exceed the terminal.
+    for (const rows of [14, 16, 18, 20, 24, 30, 40]) {
+      const chrome = isCompact(rows) ? 13 : 16;
+      expect(chrome + listPageSize(rows)).toBeLessThanOrEqual(rows);
+    }
+    expect(MIN_ROWS).toBe(14);
   });
 
   it("renders the menu bar with brand and connection status", async () => {
@@ -228,8 +243,30 @@ describe("ui rendering", () => {
 
   it("pads the name so the mv marker sits in a fixed column", async () => {
     const out = await capture(React.createElement(Explorer, { state: explorerState({}) }));
-    // "sample-extension" is 16 columns, padded to NAME_W (18) before " mv2".
-    expect(out).toContain("sample-extension   mv2");
+    // The name column is sized from the panel width now, so assert the alignment property
+    // (name padded, then " mvN") rather than one hardcoded pad width.
+    expect(out).toMatch(/sample-extension {2,} mv2/);
+  });
+
+  it("labels the list columns", async () => {
+    const out = await capture(React.createElement(Explorer, { state: explorerState({}) }));
+    expect(out).toContain("score");
+    expect(out).toContain("name");
+    expect(out).toContain("ver");
+  });
+
+  it("grows the name column with the terminal instead of capping it at 18", async () => {
+    const long = { ...light, name: "an-extension-with-a-very-long-name-indeed" };
+    const narrow = await capture(
+      React.createElement(Explorer, { state: explorerState({ lights: [long] }) }),
+      { columns: 80 },
+    );
+    const wide = await capture(
+      React.createElement(Explorer, { state: explorerState({ lights: [long] }) }),
+      { columns: 200 },
+    );
+    const shown = (out: string) => (out.match(/an-extension-with-a-very-long-name-indeed/) ? 99 : (out.match(/an-extension[-a-z]*/)?.[0].length ?? 0));
+    expect(shown(wide)).toBeGreaterThan(shown(narrow));
   });
 
   it("marks a tested row with the check icon and hides the migrated icon", async () => {
@@ -274,6 +311,8 @@ describe("ui rendering", () => {
     expect(out).toContain("analyzer");
     expect(out).toContain("migrate all / stop host job");
     expect(out).toContain("record a report");
+    expect(out).toContain("list markers");
+    expect(out).toContain("a report has been recorded");
   });
 
   it("renders analyzer tags and breakdown bars", async () => {
@@ -319,5 +358,48 @@ describe("ui rendering", () => {
     expect(out).toContain("boom");
     expect(out).toContain("ssh myserver");
     expect(out).toContain("↑/↓ select · enter open · q quit");
+  });
+});
+
+describe("error formatting", () => {
+  // The exact shape that filled the explorer panel with ~40 lines of JSON when the stub
+  // server omitted a required field.
+  const zodWall =
+    '-32603: ' +
+    JSON.stringify(
+      [
+        { code: "invalid_type", expected: "boolean", received: "undefined", path: ["extensions", 0, "hasReport"], message: "Required" },
+        { code: "invalid_type", expected: "boolean", received: "undefined", path: ["extensions", 1, "hasReport"], message: "Required" },
+        { code: "invalid_type", expected: "boolean", received: "undefined", path: ["extensions", 2, "hasReport"], message: "Required" },
+      ],
+      null,
+      2,
+    );
+
+  it("collapses a zod issue array to one actionable line", () => {
+    expect(formatError(zodWall)).toBe("-32603 extensions.0.hasReport: Required (+2 more)");
+  });
+
+  it("keeps a plain message intact", () => {
+    expect(formatError("not connected")).toBe("not connected");
+    expect(formatError("-32601: unknown method")).toBe("-32601 unknown method");
+  });
+
+  it("collapses multi-line text to its first meaningful line", () => {
+    expect(formatError("boom\n  at stack frame\n  at more")).toBe("boom");
+  });
+
+  it("renders an error as one row instead of a wall of JSON", async () => {
+    const out = await capture(
+      React.createElement(Explorer, { state: explorerState({ lights: [], error: zodWall }) }),
+      { columns: 200 },
+    );
+    expect(out).toContain("hasReport: Required");
+    // The raw zod payload must not reach the screen.
+    expect(out).not.toContain('"invalid_type"');
+    expect(out).not.toContain('"expected"');
+    // One row, not forty: no line of the frame may repeat the issue text.
+    const errorRows = out.split("\n").filter((l) => l.includes("hasReport"));
+    expect(errorRows).toHaveLength(1);
   });
 });

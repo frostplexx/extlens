@@ -17,7 +17,25 @@ import {
 
 /** Fixed widths (display columns) for the list row fields. */
 const SCORE_W = 6;
-const NAME_W = 18;
+/**
+ * Columns a row spends on everything except the name:
+ * marker(2) + score(SCORE_W) + space + space + "mvN"(3) + space + flag(1).
+ * Undercounting this by even one column makes truncate-end eat the trailing ✓/↑ marker, so
+ * the last +1 is a deliberate spare column: ink truncates when the text exactly fills the box.
+ */
+const ROW_CHROME_W = 2 + SCORE_W + 1 + 1 + 3 + 1 + 1 + 1;
+/** Never squeeze the name below this, even in a very narrow terminal. */
+const NAME_W_MIN = 12;
+
+/**
+ * Name column width for a list panel of `panelWidth` outer columns. The name is the row's
+ * primary identifier, so it takes whatever the fixed fields leave: a hardcoded 18 wasted
+ * ~30 columns of a 57-wide panel and truncated names that had room to spare.
+ */
+export function nameWidthFor(panelWidth: number): number {
+  const content = panelWidth - 4; // round border (2) + paddingX 1 each side (2)
+  return Math.max(NAME_W_MIN, content - ROW_CHROME_W);
+}
 const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
 const SORT_LABELS: Record<SortOrder, string> = {
@@ -76,10 +94,12 @@ function LightRow({
   light,
   selected,
   search,
+  nameWidth,
 }: {
   light: ExtensionLight;
   selected: boolean;
   search: string;
+  nameWidth: number;
 }) {
   const tone = scoreTone(light.score);
   return (
@@ -91,7 +111,7 @@ function LightRow({
       <Text color={selected ? c.selectedFg : undefined} bold={selected}>
         {" "}
         <Highlight
-          text={padEndWidth(truncateWidth(light.name, NAME_W), NAME_W)}
+          text={padEndWidth(truncateWidth(light.name, nameWidth), nameWidth)}
           query={search}
           bold={selected}
         />
@@ -104,6 +124,19 @@ function LightRow({
         {" "}
         {light.hasReport ? "✓" : light.hasMv3 ? "↑" : " "}
       </Text>
+    </Text>
+  );
+}
+
+/**
+ * Column headings for the list. Without these the row reads "▶ 78 One Ext mv2 ✓" and nothing
+ * on screen says what 78, ✓ or ↑ mean.
+ */
+function ListHeader({ nameWidth }: { nameWidth: number }) {
+  return (
+    <Text color={c.muted} wrap="truncate-end">
+      {"  "}
+      {"score".padStart(SCORE_W)} {padEndWidth("name", nameWidth)} {"ver"} {" "}
     </Text>
   );
 }
@@ -182,12 +215,15 @@ export function Explorer({
   state,
   host = { status: null, error: null, supported: false },
   pageSize,
+  compact = false,
 }: {
   state: ExplorerState;
   /** Host lifecycle segment on the stats row; optional in unit renders. */
   host?: { status: HostStatus | null; error: string | null; supported: boolean };
   /** Rows the list can show; used to pad the last page to a fixed height. */
   pageSize?: number;
+  /** Drop the blank spacer rows so the frame fits a short terminal. */
+  compact?: boolean;
 }) {
   const { stats, search, searchFocused, selectedIndex, loading, error, page, totalPages } =
     state;
@@ -204,6 +240,7 @@ export function Explorer({
   // stale lines from a previous frame.
   const renderedRows = error ? 1 : lights.length === 0 ? 1 : lights.length;
   const padCount = Math.max(0, (pageSize ?? lights.length) - renderedRows);
+  const nameWidth = nameWidthFor(listWidth);
 
   return (
     <Box flexDirection="column">
@@ -217,12 +254,13 @@ export function Explorer({
         </Box>
       </Box>
 
-      <Box marginY={1}>
+      <Box marginY={compact ? 0 : 1}>
         <SearchBar search={search} focused={searchFocused} sort={SORT_LABELS[state.sort]} />
       </Box>
 
       <Box flexDirection="row" columnGap={gap} width="100%">
         <Panel title={`Extensions (${stats?.total ?? lights.length})`} width={listWidth}>
+          <ListHeader nameWidth={nameWidth} />
           {error ? (
             <ErrorLine message={error} />
           ) : lights.length === 0 ? (
@@ -238,6 +276,7 @@ export function Explorer({
                 light={light}
                 selected={i === selectedIndex}
                 search={search}
+                nameWidth={nameWidth}
               />
             ))
           )}

@@ -28,7 +28,7 @@ import { Analyzer } from "./components/analyzer.js";
 import { Explorer } from "./components/explorer.js";
 import { ReportForm, buildReportRows } from "./components/report-form.js";
 import { StatusBar } from "./components/status-bar.js";
-import { HelpView, LogView, TopBar, listPageSize } from "./components/ui.js";
+import { HelpView, LogView, TooSmall, TopBar, isCompact, listPageSize, MIN_ROWS } from "./components/ui.js";
 import { c } from "./theme.js";
 import type {
   AnalyzerState,
@@ -89,6 +89,10 @@ export function App({
   // One screen of extensions per page. The list never renders more rows
   // than fit the terminal.
   const pageSize = listPageSize(stdout.rows);
+  const compact = isCompact(stdout.rows);
+  // Below MIN_ROWS even a one-row list overflows, and a frame taller than the terminal
+  // scrolls its own top away. Say so instead of drawing a broken screen.
+  const tooSmall = (stdout.rows ?? 24) < MIN_ROWS;
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [view, setView] = useState<View>("explorer");
@@ -830,6 +834,10 @@ export function App({
           ? "? help · q quit"
           : "↑/↓ j/k scroll · b launch · x close · r report · esc back · ? help · q quit";
 
+  if (tooSmall) {
+    return <TooSmall rows={stdout.rows ?? 24} columns={stdout.columns ?? 80} />;
+  }
+
   return (
     <Box flexDirection="column">
       {passwordPrompt ? (
@@ -844,7 +852,7 @@ export function App({
       {helpOpen ? (
         <HelpView />
       ) : view === "explorer" ? (
-        <Explorer state={explorer} host={host} pageSize={pageSize} />
+        <Explorer state={explorer} host={host} pageSize={pageSize} compact={compact} />
       ) : view === "log" ? (
         <LogView
           status={host.status}
@@ -877,6 +885,7 @@ export function App({
         sshLabel={sshMode ? (sshSpec?.destination ?? null) : null}
         tunnel={sshMode ? tunnel : null}
         hints={hints}
+        compact={compact}
       />
     </Box>
   );

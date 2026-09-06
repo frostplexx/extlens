@@ -69,6 +69,10 @@ function makeBackend(): Backend {
           score: profile.score,
           tags: profile.tags,
           hasMv3: profile.hasMv3,
+          // Required by ExtensionLight (packages/protocol/src/messages.ts). Omitting it made
+          // every listExtensions response fail protocol validation, so the documented
+          // quickstart showed a wall of zod errors instead of the fixture list.
+          hasReport: reports.has(profile.id),
         };
       });
       const sorted = [...all].sort((a, b) => {

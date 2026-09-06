@@ -14,6 +14,7 @@ export function StatusBar({
   sshLabel = null,
   tunnel = null,
   hints = "",
+  compact = false,
 }: {
   message: string | null;
   /** Remote host in ssh mode, or null for a local host. */
@@ -22,6 +23,8 @@ export function StatusBar({
   tunnel?: TunnelStatus | null;
   /** Contextual key hints for the active tab, or "" for none. */
   hints?: string;
+  /** Drop the spacer row above the rule so the frame fits a short terminal. */
+  compact?: boolean;
 }) {
   const segments: React.ReactNode[] = [];
   if (message) {
@@ -47,7 +50,7 @@ export function StatusBar({
   }
   return (
     <Box flexDirection="column">
-      <Rule marginTop={1} />
+      <Rule marginTop={compact ? 0 : 1} />
       <Box justifyContent="space-between">
         <Text>{segments}</Text>
         {hints ? <Text color={c.muted}>{hints}</Text> : null}

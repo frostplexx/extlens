@@ -162,7 +162,7 @@ export function createSshManager(options: SshManagerOptions): SshManager {
     ];
 
     // Key auth first; BatchMode never prompts.
-    const key = await spawnSsh([...baseArgs, "-o", "BatchMode=yes", ...forwardArgs], "pipe", undefined, sshBin);
+    const key = await spawnSshFork([...baseArgs, "-o", "BatchMode=yes", ...forwardArgs], undefined, sshBin);
     if (key.code === 0) return "ok";
     const keyKind = classifyFailure(key.stderr);
     if (keyKind !== "auth") throw connectionError(spec.destination, key.code, key.stderr);
@@ -173,9 +173,8 @@ export function createSshManager(options: SshManagerOptions): SshManager {
       if (secret === "") return "cancelled";
       const askpass = writeAskpass(secret);
       try {
-        const res = await spawnSsh(
+        const res = await spawnSshFork(
           [...baseArgs, "-o", "NumberOfPasswordPrompts=1", ...forwardArgs],
-          "pipe",
           {
             ...process.env,
             SSH_ASKPASS: askpass.script,
@@ -410,6 +409,34 @@ function spawnSsh(
   });
 }
 
+/**
+ * Spawn ssh that forks a background master with `-f`. The daemon keeps the
+ * inherited stderr fd open, so the child's `close` event never fires while
+ * the master lives. Resolve on `exit` instead, with a short settle window
+ * for any final diagnostics.
+ */
+function spawnSshFork(
+  args: string[],
+  env?: NodeJS.ProcessEnv,
+  sshBin = "ssh",
+): Promise<{ code: number | null; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(sshBin, args, {
+      stdio: ["ignore", "ignore", "pipe"],
+      ...(env ? { env } : {}),
+    });
+    let stderr = "";
+    child.stderr?.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.once("error", reject);
+    child.once("exit", (code) => {
+      // The master may still write diagnostics for a moment after fork.
+      setTimeout(() => resolve({ code, stderr }), 400);
+    });
+  });
+}
+
 /** Pipe `ssh <args>` stdout into a local `tar -xf -` in extractDir. */
 function streamSsh(
   args: string[],
@@ -451,7 +478,7 @@ function streamSsh(
   });
 }
 
-async function waitForPort(port: number, attempts = 20): Promise<void> {
+async function waitForPort(port: number, attempts = 40): Promise<void> {
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     if (await portOpen(port)) return;
     await delay(100);

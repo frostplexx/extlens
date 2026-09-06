@@ -220,7 +220,10 @@ export function ReportForm({
   const { stdout } = useStdout();
   const termRows = stdout.rows ?? 24;
   const cols = stdout.columns ?? 80;
-  const visible = Math.max(6, termRows - 6);
+  const visible = Math.max(1, termRows - 6);
+  // The header is 7 fixed rows; on a short terminal that alone overflows, so drop the blank
+  // spacer and the rule when space is tight rather than pushing the frame off screen.
+  const tight = termRows < 20;
 
   const header: React.ReactNode[] = [
     <Text key="h-title">
@@ -230,7 +233,7 @@ export function ReportForm({
         — {form.saving ? "saving…" : form.savedId ? `saved as ${form.savedId}` : "unsaved"}
       </Text>
     </Text>,
-    <Text key="h-gap"> </Text>,
+    ...(tight ? [] : [<Text key="h-gap"> </Text>]),
     <Text key="h-name">
       <Text bold>Extension: </Text>
       {auto.name}
@@ -247,9 +250,13 @@ export function ReportForm({
       <Text bold>Verification Time: </Text>
       {auto.elapsedSecs === null ? "not started" : `${auto.elapsedSecs.toFixed(1)}s`}
     </Text>,
-    <Text key="h-rule" dimColor>
-      {"─".repeat(Math.max(10, cols - 4))}
-    </Text>,
+    ...(tight
+      ? []
+      : [
+          <Text key="h-rule" dimColor>
+            {"─".repeat(Math.max(10, cols - 4))}
+          </Text>,
+        ]),
   ];
 
   const footer: React.ReactNode[] = [
@@ -267,7 +274,9 @@ export function ReportForm({
 
   const body = rows.map(renderRow);
   const fixed = header.length + footer.length;
-  const available = Math.max(3, visible - fixed);
+  // Floor of 1: a floor of 3 meant the form was always at least `fixed + 4` rows tall, which
+  // overflowed any terminal shorter than about 18 rows.
+  const available = Math.max(1, visible - fixed);
   const overflowing = body.length > available;
   const rowWindow = overflowing ? available - 1 : available;
   const focus = form.cursor;
