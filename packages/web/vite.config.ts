@@ -12,6 +12,15 @@ export default defineConfig({
     // `@/…` matches the shadcn convention, and keeps component imports stable if files move.
     resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
     base: "./",
-    build: { outDir: "dist", emptyOutDir: true },
+    build: {
+        outDir: "dist",
+        emptyOutDir: true,
+        /*
+         * The default 500 kB warning is about download cost over a network. This bundle is served
+         * from 127.0.0.1 by the same process that owns the browsers, so splitting it would trade a
+         * measurable startup simplification for nothing. Raised deliberately, not silenced.
+         */
+        chunkSizeWarningLimit: 800,
+    },
     server: { port: 5173 },
 });

@@ -59,8 +59,19 @@ async function serveStatic(req: IncomingMessage, res: ServerResponse): Promise<v
     res.end(await readFile(file));
 }
 
+/**
+ * Arguments as the script actually receives them.
+ *
+ * A literal `--` can survive the npm chain when one is typed by hand (`npm run web -- -- --ssh
+ * host`), which is a natural thing to type and used to be necessary. It is a separator, never a
+ * flag, so drop it rather than letting it become a positional argument some future parser trips on.
+ */
+function scriptArgs(argv: string[]): string[] {
+    return argv.filter((arg) => arg !== "--");
+}
+
 async function main(): Promise<void> {
-    const argv = process.argv.slice(2);
+    const argv = scriptArgs(process.argv.slice(2));
     const port = Number(flag(argv, "port") ?? process.env.EXTLENS_WEB_PORT ?? 8090);
     const wsUrl = flag(argv, "ws") ?? process.env.EXTLENS_WS ?? "ws://localhost:8081";
     const sshSpec = parseSshSpec(argv);

@@ -54,7 +54,12 @@ export function SurfaceTable({
     }
 
     return (
-        <div className="divide-y rounded-md border">
+        /*
+         * A container query, not a viewport one: this table renders both in the narrow browse
+         * aside and in the wide review column, and which of those it is in has nothing to do with
+         * the window size. Labels appear when the table itself has room for them.
+         */
+        <div className="@container divide-y rounded-md border">
             {detected.map(({ surface, evidence }) => {
                 const result = results.find((r) => r.surface === surface);
                 const status = result?.status ?? "untested";
@@ -79,13 +84,16 @@ export function SurfaceTable({
                                                 aria-pressed={status === value}
                                                 onClick={() => onChange(surface, { status: value })}
                                                 className={cn(
-                                                    "rounded-md border px-2 py-1 transition-colors",
+                                                    "flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors",
                                                     status === value
                                                         ? `border-current bg-secondary ${tone}`
                                                         : "border-transparent text-muted-foreground hover:bg-secondary/60",
                                                 )}
                                             >
-                                                <Icon className="size-4" />
+                                                <Icon className="size-4 shrink-0" />
+                                                {/* Five near-identical glyphs are a poor target for
+                                                    something clicked hundreds of times in a pass. */}
+                                                <span className="hidden @2xl:inline">{label}</span>
                                             </button>
                                         </TooltipTrigger>
                                         <TooltipContent>{label}</TooltipContent>
