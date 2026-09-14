@@ -183,14 +183,11 @@ export function useReportForm(
             isSettingsWorking: flags.hasSettings ? form.isSettingsWorking : null,
             isNewTabWorking: flags.isNewTab ? form.isNewTabWorking : null,
             isInteresting: form.isInteresting,
-            overallWorking: form.overallWorking,
+            // Superseded by the surface results; sent as null so the field means "not answered".
+            overallWorking: null,
             notes: form.notes,
-            listeners: profile.listeners.map((l, i) => ({
-                api: l.api,
-                file: l.file,
-                line: l.line,
-                status: form.listenerStatus[i] ?? "untested",
-            })),
+            // Listeners are evidence about a surface, not a thing a reviewer can judge directly.
+            listeners: [],
             surfaces,
             // Derived, never asked: both clients use protocol/verdict.ts so a corpus reviewed in
             // the terminal and in the browser stays comparable.

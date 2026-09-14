@@ -142,6 +142,27 @@ For UI development, `npm run web:dev` runs vite on :5173 with HMR; keep
 `npm run start --workspace packages/web` running alongside it for the bridge,
 and open the :5173 page with the same `?token=` query.
 
+### The verification form
+
+One row per surface the extension actually exposes, each with an instruction for what to check
+(`packages/protocol/src/surface-copy.ts`, shared by both clients so two reviewers answer the same
+question). Four states per surface — works / partly works / broken / can't test — and the verdict
+and 0–1 score are computed from them, never asked for.
+
+Two things are deliberately *not* on the form:
+
+- **Listeners are not judged.** You cannot watch `chrome.contextMenus.onClicked` fire, only the
+  menu entry doing something. Each listener is shown as evidence under the surface it exercises,
+  so it reads as "here is what to trigger" rather than as a question.
+- **No overall verdict field.** It is derived from the surface results; asking for it separately
+  invites a reviewer to contradict their own observations.
+
+For page interaction, content-script match patterns are turned into openable pages
+(`https://*.github.com/*` → `https://github.com/`) and clicking one opens it in **both** running
+test browsers at once, which is what makes MV2 and MV3 behaviour comparable rather than
+remembered. A pattern that names no particular site (`<all_urls>`, `https://*/*`) is shown as
+"any page" rather than resolved to an invented host.
+
 ### Review mode
 
 Browse mode is a table; review mode is the loop you actually run a corpus

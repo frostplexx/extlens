@@ -13,6 +13,11 @@
 import * as React from "react";
 import type { DetectedSurface, SurfaceResult, SurfaceStatus, UiSurface } from "@extlens/protocol";
 import { SURFACE_HINTS, SURFACE_LABELS } from "@extlens/protocol";
+// Subpaths, not the package barrel: the barrel reaches node:crypto and cannot be bundled.
+import { probeUrls } from "@extlens/analyzer/match-patterns";
+import { listenersBySurface } from "@extlens/analyzer/surfaces";
+import { ExternalLink } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { CircleDashed, CircleSlash, CheckCircle2, CircleAlert, XCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -30,10 +35,18 @@ export function SurfaceTable({
     detected,
     results,
     onChange,
+    contentScriptMatches = [],
+    onOpenUrl,
+    listeners = [],
 }: {
     detected: DetectedSurface[];
     results: SurfaceResult[];
     onChange: (surface: UiSurface, patch: Partial<SurfaceResult>) => void;
+    /** Match patterns from the manifest, turned into pages the reviewer can open. */
+    contentScriptMatches?: string[];
+    onOpenUrl?: (url: string) => void;
+    /** Detected listeners, shown under the surface each one exercises. */
+    listeners?: { api: string; file: string; line: number | null }[];
 }) {
     if (detected.length === 0) {
         return (
@@ -43,6 +56,8 @@ export function SurfaceTable({
             </p>
         );
     }
+
+    const bySurface = listenersBySurface(listeners);
 
     return (
         /*
@@ -71,6 +86,27 @@ export function SurfaceTable({
                                     is not self-explanatory. */}
                                 <p className="text-xs leading-snug text-muted-foreground">{SURFACE_HINTS[surface]}</p>
                                 <p className="text-xs text-muted-foreground/60">{evidence}</p>
+                                {surface === "page_interaction" ? (
+                                    <PageTargets matches={contentScriptMatches} onOpenUrl={onOpenUrl} />
+                                ) : null}
+                                {/* The events this surface runs on. Not rows to judge — you cannot
+                                    watch a listener fire — but the concrete things to trigger. */}
+                                {(bySurface.get(surface) ?? []).length > 0 ? (
+                                    <ul className="pt-1">
+                                        {(bySurface.get(surface) ?? []).map((l) => (
+                                            <li key={`${l.api}:${l.file}:${l.line}`} className="truncate">
+                                                <span className="font-mono text-xs text-muted-foreground/70">
+                                                    {l.api}
+                                                    <span className="text-muted-foreground/50">
+                                                        {" "}
+                                                        {l.file}
+                                                        {l.line === null ? "" : `:${l.line}`}
+                                                    </span>
+                                                </span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                ) : null}
                             </div>
                             <div className="flex gap-1">
                                 {STATUSES.map(({ value, label, icon: Icon, tone }) => (
@@ -112,6 +148,48 @@ export function SurfaceTable({
                     </div>
                 );
             })}
+        </div>
+    );
+}
+
+/**
+ * The pages a content script claims to run on, as buttons that open them in the test browsers.
+ *
+ * Asking "does page interaction work?" without saying where to look is most of why that surface
+ * gets guessed at. Opening the page in both browsers at once is also the only way to compare MV2
+ * and MV3 behaviour rather than remember it.
+ */
+function PageTargets({ matches, onOpenUrl }: { matches: string[]; onOpenUrl?: (url: string) => void }) {
+    const targets = probeUrls(matches);
+    if (targets.length === 0) return null;
+    return (
+        <div className="flex flex-wrap items-center gap-1 pt-1">
+            {targets.map(({ pattern, url }) =>
+                url ? (
+                    <Button
+                        key={pattern}
+                        size="sm"
+                        variant="outline"
+                        className="h-6 px-2 text-xs font-normal"
+                        title={`Open ${url} in the running test browsers (from ${pattern})`}
+                        onClick={() => onOpenUrl?.(url)}
+                        disabled={!onOpenUrl}
+                    >
+                        <ExternalLink className="size-3" />
+                        {url.replace(/^https?:\/\//, "")}
+                    </Button>
+                ) : (
+                    // A pattern naming no particular site is still worth stating: "runs everywhere"
+                    // is a thing to check, not a gap in the data.
+                    <span
+                        key={pattern}
+                        title={`${pattern} — no single page represents this; try any site you would normally use`}
+                        className="rounded border px-2 py-0.5 text-xs text-muted-foreground"
+                    >
+                        any page ({pattern})
+                    </span>
+                ),
+            )}
         </div>
     );
 }

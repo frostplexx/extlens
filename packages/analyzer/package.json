@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./match-patterns": "./src/match-patterns.ts",
+    "./surfaces": "./src/surfaces.ts"
   },
   "devDependencies": {
     "typescript": "^5.7.2"

@@ -130,3 +130,40 @@ export function detectSurfaces(manifest: Manifest, files: SourceFile[]): Detecte
         evidence: found.get(surface) as string,
     }));
 }
+
+/**
+ * Which surface an event listener belongs to.
+ *
+ * Listeners used to be judged on their own row, which asked the reviewer a question they cannot
+ * answer: you cannot see `chrome.contextMenus.onClicked` fire, you can only see the context menu
+ * entry do something. So a listener is not a thing to judge — it is evidence about a surface, and
+ * telling the reviewer *which* surface turns a list of API names into "here is what to exercise".
+ */
+const LISTENER_SURFACES: { pattern: RegExp; surface: UiSurface }[] = [
+    { pattern: /\.(action|browserAction|pageAction)\.onClicked/, surface: "toolbar_action" },
+    { pattern: /\.contextMenus\./, surface: "context_menu" },
+    { pattern: /\.commands\.onCommand/, surface: "keyboard_shortcuts" },
+    { pattern: /\.notifications\./, surface: "notifications" },
+    { pattern: /\.omnibox\./, surface: "omnibox" },
+    { pattern: /\.sidePanel\./, surface: "side_panel" },
+    { pattern: /\.devtools\./, surface: "devtools" },
+    { pattern: /\.(webNavigation|webRequest|tabs|windows|alarms|runtime|storage|idle|cookies)\./, surface: "background" },
+];
+
+/** The surface an API name belongs to, or null when it says nothing about the UI. */
+export function surfaceForListener(api: string): UiSurface | null {
+    return LISTENER_SURFACES.find(({ pattern }) => pattern.test(api))?.surface ?? null;
+}
+
+/** Group listener API names under the surface each one exercises. */
+export function listenersBySurface<T extends { api: string }>(listeners: T[]): Map<UiSurface, T[]> {
+    const grouped = new Map<UiSurface, T[]>();
+    for (const listener of listeners) {
+        const surface = surfaceForListener(listener.api);
+        if (!surface) continue;
+        const bucket = grouped.get(surface) ?? [];
+        bucket.push(listener);
+        grouped.set(surface, bucket);
+    }
+    return grouped;
+}

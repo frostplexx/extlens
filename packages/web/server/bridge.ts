@@ -91,6 +91,8 @@ export class Bridge {
                 return this.closeAll();
             case "local.answerPrompt":
                 return this.answerPrompt(Boolean(params.accept));
+            case "local.openUrl":
+                return this.openUrl(String(params.url ?? ""));
             default:
                 throw new Error(`unknown local method: ${method}`);
         }
@@ -176,6 +178,34 @@ export class Bridge {
             });
         }
         return this.snapshot();
+    }
+
+    /**
+     * Open a page in the running test browsers.
+     *
+     * Only http(s): this method takes a string from a web page and hands it to a browser the
+     * server controls, so the scheme list is a whitelist rather than a blacklist — file:// would
+     * turn a page into a local file reader.
+     */
+    private async openUrl(url: string): Promise<unknown> {
+        let parsed: URL;
+        try {
+            parsed = new URL(url);
+        } catch {
+            throw new Error(`not a URL: ${url}`);
+        }
+        if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+            throw new Error(`refusing to open ${parsed.protocol} — only http and https`);
+        }
+        if (this.browsers.activeCount === 0) {
+            throw new Error("no test browser is running — launch them first");
+        }
+        const results = await this.browsers.openUrl(parsed.toString());
+        const failed = results.filter((r) => !r.ok);
+        if (failed.length === results.length) {
+            throw new Error(`could not open ${parsed.hostname}: ${failed[0]?.error ?? "unknown error"}`);
+        }
+        return { opened: results.filter((r) => r.ok).map((r) => r.label), failed };
     }
 
     /** Kill every browser this process started. Called on shutdown. */

@@ -59,6 +59,22 @@ export function App() {
         [bridge],
     );
 
+    /**
+     * Open a page in the running test browsers.
+     *
+     * Same URL in both windows, which is what makes a content script's behaviour comparable
+     * rather than remembered. Failure is worth a toast: "no browser running" is actionable.
+     */
+    const openUrl = useCallback(
+        (url: string) => {
+            bridge
+                .call<{ opened: string[] }>("local.openUrl", { url })
+                .then((r) => toast.success(`Opened in ${r.opened.join(" and ") || "no browser"}`))
+                .catch((e: Error) => toast.error(e.message));
+        },
+        [bridge],
+    );
+
     // A starting job opens the dock once. Having to go find the log to learn a batch began is a
     // small papercut that recurs every single run.
     const wasRunning = useRef(false);
@@ -177,6 +193,7 @@ export function App() {
                         onSubmitReport={submitReport}
                         submitting={submitting}
                         submitError={submitError}
+                        onOpenUrl={openUrl}
                         onExit={() => setMode("browse")}
                     />
                 ) : (
@@ -270,6 +287,7 @@ export function App() {
                                 onSubmitReport={submitReport}
                                 submitting={submitting}
                                 submitError={submitError}
+                                onOpenUrl={openUrl}
                             />
                         </aside>
                     </ResizablePanel>

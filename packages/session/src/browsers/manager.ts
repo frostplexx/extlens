@@ -49,7 +49,8 @@ export function resolveExecutable(label: "mv2" | "mv3"): string | null {
 }
 
 export class BrowserManager {
-  private contexts: BrowserContext[] = [];
+  /** Live contexts, labelled, so a page can be opened in each and reported per browser. */
+  private contexts: { label: "mv2" | "mv3"; context: BrowserContext }[] = [];
 
   /** Launch one browser and detect the extension load. Updates `state`. */
   async launch(
@@ -77,7 +78,7 @@ export class BrowserManager {
         ignoreDefaultArgs: ["--disable-extensions"],
         args: [`--load-extension=${spec.extensionPath}`, "--no-sandbox", ...V0_FLAGS],
       });
-      this.contexts.push(context);
+      this.contexts.push({ label: spec.label, context });
       const browser = context.browser();
       if (!browser) throw new Error("no browser handle");
 
@@ -97,8 +98,31 @@ export class BrowserManager {
     }
   }
 
+  /**
+   * Open a page in every running browser.
+   *
+   * The point is side-by-side: the same URL in the MV2 and MV3 windows is what makes a content
+   * script's behaviour comparable rather than remembered. A browser that fails to navigate is
+   * reported rather than throwing, since the other one may well have worked.
+   */
+  async openUrl(url: string): Promise<{ label: "mv2" | "mv3"; ok: boolean; error?: string }[]> {
+    return Promise.all(
+      this.contexts.map(async ({ label, context }) => {
+        try {
+          const page = await context.newPage();
+          // Not networkidle: an ad-heavy page may never reach it, and the reviewer only needs the
+          // page to be there to look at.
+          await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
+          return { label, ok: true };
+        } catch (error) {
+          return { label, ok: false, error: error instanceof Error ? error.message : String(error) };
+        }
+      }),
+    );
+  }
+
   async closeAll(): Promise<void> {
-    await Promise.all(this.contexts.map((c) => c.close().catch(() => {})));
+    await Promise.all(this.contexts.map(({ context }) => context.close().catch(() => {})));
     this.contexts = [];
   }
 

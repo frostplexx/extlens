@@ -19,7 +19,8 @@ import type {
 import { scoreSurfaces, VERDICT_LABELS, verdictFor } from "@extlens/protocol";
 import { Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle } from "@/components/ui/item";
+import { Switch } from "@/components/ui/switch";
 import {
     Field,
     FieldContent,
@@ -89,30 +90,8 @@ interface Draft {
     isSettingsWorking: boolean;
     isNewTabWorking: boolean;
     isInteresting: boolean;
-    overallWorking: OverallWorking;
     notes: string;
-    listeners: ("untested" | "yes" | "no")[];
     surfaces: SurfaceResult[];
-}
-
-/** A failing quick assessment downgrades the overall verdict; "yes" must not survive one. */
-function downgrade(d: Draft, flags: Flags): OverallWorking {
-    if (!d.installs) return "no";
-    if (d.needsLogin) return "could_not_test";
-    if (flags.hasPopup && !d.isPopupWorking) return "no";
-    if (flags.hasSettings && !d.isSettingsWorking) return "no";
-    if (flags.isNewTab && !d.isNewTabWorking) return "no";
-    return d.overallWorking;
-}
-
-/** Why the overall verdict is not the reviewer's to raise, spelled out under the control. */
-function downgradeReason(d: Draft, flags: Flags): string | null {
-    if (!d.installs) return "Forced to “broken”: the extension does not install.";
-    if (d.needsLogin) return "Forced to “could not test”: the extension needs a login.";
-    if (flags.hasPopup && !d.isPopupWorking) return "Forced to “broken”: the popup does not work.";
-    if (flags.hasSettings && !d.isSettingsWorking) return "Forced to “broken”: the options page does not work.";
-    if (flags.isNewTab && !d.isNewTabWorking) return "Forced to “broken”: the new tab override does not work.";
-    return null;
 }
 
 export function ReportForm({
@@ -123,6 +102,7 @@ export function ReportForm({
     error,
     submitLabel,
     footer,
+    onOpenUrl,
 }: {
     profile: ExtensionProfile;
     saved: Report | null;
@@ -133,6 +113,8 @@ export function ReportForm({
     submitLabel?: string;
     /** Extra controls beside it — the review pass puts Skip here. */
     footer?: React.ReactNode;
+    /** Open a page in the running test browsers; omitted where that is not wired up. */
+    onOpenUrl?: (url: string) => void;
 }) {
     const flags = useMemo(() => flagsOf(profile), [profile]);
     const detected = useMemo(() => surfacesToAsk(profile), [profile]);
@@ -146,13 +128,8 @@ export function ReportForm({
         setStartedAt(Date.now());
     }, [profile.id, saved]);
 
-    const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
-        setDraft((d) => {
-            const next = { ...d, [key]: value };
-            return { ...next, overallWorking: downgrade(next, flags) };
-        });
+    const set = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft((d) => ({ ...d, [key]: value }));
 
-    const reason = downgradeReason(draft, flags);
     const summary = scoreSurfaces(draft.surfaces);
     const verdict = verdictFor(draft.surfaces);
 
@@ -169,14 +146,13 @@ export function ReportForm({
             isSettingsWorking: flags.hasSettings ? draft.isSettingsWorking : null,
             isNewTabWorking: flags.isNewTab ? draft.isNewTabWorking : null,
             isInteresting: draft.isInteresting,
-            overallWorking: draft.overallWorking,
+            // Superseded by the per-surface results, which is where behaviour is actually visible.
+            // Still sent, as null, so the field keeps meaning "not answered" rather than "no".
+            overallWorking: null,
             notes: draft.notes,
-            listeners: profile.listeners.map((l, i) => ({
-                api: l.api,
-                file: l.file,
-                line: l.line,
-                status: draft.listeners[i] ?? "untested",
-            })),
+            // Listeners are no longer judged on their own: a reviewer cannot watch one fire. They
+            // appear as evidence under the surface each exercises (see SurfaceTable).
+            listeners: [],
             surfaces: draft.surfaces,
             // Derived, not asked: both clients compute them the same way (protocol/verdict.ts) so
             // a corpus reviewed in two places stays comparable.
@@ -186,18 +162,41 @@ export function ReportForm({
 
     return (
         <FieldGroup>
+            {/* Facts about the attempt rather than about a surface. Labelled switches, not a grid
+                of bare checkboxes: three of these change how the whole result should be read — an
+                extension that does not install, or that was already broken in MV2, says nothing
+                about the migration — so the reviewer should see what each one means. */}
             <FieldSet>
-                <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-                    <Check id="installs" label="Installs" checked={draft.installs} onChange={(v) => set("installs", v)} />
-                    <Check id="mv2" label="Works in MV2" checked={draft.worksInMv2} onChange={(v) => set("worksInMv2", v)} />
-                    <Check id="login" label="Needs login" checked={draft.needsLogin} onChange={(v) => set("needsLogin", v)} />
-                    <Check
+                <ItemGroup className="gap-2">
+                    <Toggle
+                        id="installs"
+                        label="Installs"
+                        hint="Chrome accepted it. If not, nothing below is testable."
+                        checked={draft.installs}
+                        onChange={(v) => set("installs", v)}
+                    />
+                    <Toggle
+                        id="mv2"
+                        label="Worked in MV2"
+                        hint="The original worked. If it did not, a failure here says nothing about the migration."
+                        checked={draft.worksInMv2}
+                        onChange={(v) => set("worksInMv2", v)}
+                    />
+                    <Toggle
+                        id="login"
+                        label="Needs an account"
+                        hint="Needs a login, a device or a paid service before it can be exercised."
+                        checked={draft.needsLogin}
+                        onChange={(v) => set("needsLogin", v)}
+                    />
+                    <Toggle
                         id="interesting"
                         label="Interesting"
+                        hint="Worth coming back to: an unusual failure, or a hard migration done well."
                         checked={draft.isInteresting}
                         onChange={(v) => set("isInteresting", v)}
                     />
-                </div>
+                </ItemGroup>
             </FieldSet>
 
             <FieldSeparator />
@@ -213,6 +212,8 @@ export function ReportForm({
                 </FieldDescription>
                 <SurfaceTable
                     detected={detected}
+                    contentScriptMatches={(profile.manifest.contentScripts ?? []).flatMap((cs) => cs.matches)}
+                    onOpenUrl={onOpenUrl}
                     results={draft.surfaces}
                     onChange={(surface: UiSurface, patch) =>
                         setDraft((d) => ({
@@ -241,68 +242,6 @@ export function ReportForm({
                 </div>
             </Field>
 
-            <Field orientation="responsive">
-                <FieldContent>
-                    <FieldLabel htmlFor="overall">Overall (legacy)</FieldLabel>
-                    <FieldDescription>
-                        {reason ?? "Kept so reports stay comparable with the pre-surface corpus."}
-                    </FieldDescription>
-                </FieldContent>
-                <Select
-                    value={draft.overallWorking}
-                    onValueChange={(value) => setDraft((d) => ({ ...d, overallWorking: value as OverallWorking }))}
-                >
-                    <SelectTrigger id="overall" className="w-48">
-                        <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="yes">Working</SelectItem>
-                        <SelectItem value="no">Broken</SelectItem>
-                        <SelectItem value="could_not_test">Could not test</SelectItem>
-                    </SelectContent>
-                </Select>
-            </Field>
-
-            {profile.listeners.length > 0 ? (
-                <Field>
-                    <FieldLabel>Listeners</FieldLabel>
-                    <FieldDescription>
-                        Each event the analyzer found. Leave one untested rather than guessing.
-                    </FieldDescription>
-                    <div className="max-h-64 space-y-1.5 overflow-auto rounded-md border p-2">
-                        {profile.listeners.map((l, i) => (
-                            <div key={`${l.api}:${l.file}:${l.line}`} className="flex items-center gap-2">
-                                <Select
-                                    value={draft.listeners[i] ?? "untested"}
-                                    onValueChange={(value) =>
-                                        setDraft((d) => {
-                                            const next = [...d.listeners];
-                                            next[i] = value as "untested" | "yes" | "no";
-                                            return { ...d, listeners: next };
-                                        })
-                                    }
-                                >
-                                    <SelectTrigger size="sm" className="w-28 shrink-0">
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="untested">untested</SelectItem>
-                                        <SelectItem value="yes">works</SelectItem>
-                                        <SelectItem value="no">broken</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                                <div className="min-w-0 truncate" title={`${l.api} — ${l.file}:${l.line}`}>
-                                    <Mono>{l.api}</Mono>
-                                    <Mono className="text-muted-foreground">
-                                        {" "}
-                                        {l.file}:{l.line}
-                                    </Mono>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </Field>
-            ) : null}
 
             <Field>
                 <FieldLabel htmlFor="notes">Notes</FieldLabel>
@@ -338,11 +277,7 @@ function initial(profile: ExtensionProfile, saved: Report | null): Draft {
         isSettingsWorking: saved?.isSettingsWorking ?? true,
         isNewTabWorking: saved?.isNewTabWorking ?? true,
         isInteresting: saved?.isInteresting ?? false,
-        overallWorking: saved?.overallWorking ?? "yes",
         notes: saved?.notes ?? "",
-        listeners: profile.listeners.map(
-            (l) => saved?.listeners.find((r) => r.api === l.api && r.file === l.file)?.status ?? "untested",
-        ),
         // One row per detected surface, resuming whatever the saved report said about it. A saved
         // answer for a surface that is no longer detected is dropped: the extension changed.
         surfaces: surfacesToAsk(profile).map(
@@ -352,24 +287,31 @@ function initial(profile: ExtensionProfile, saved: Report | null): Draft {
     };
 }
 
-function Check({
+function Toggle({
     id,
     label,
+    hint,
     checked,
     onChange,
 }: {
     id: string;
     label: string;
+    hint: string;
     checked: boolean;
     onChange: (value: boolean) => void;
 }) {
     return (
-        <Field orientation="horizontal">
-            <Checkbox id={id} checked={checked} onCheckedChange={(value) => onChange(value === true)} />
-            <FieldLabel htmlFor={id} className="font-normal">
-                <FieldTitle>{label}</FieldTitle>
-            </FieldLabel>
-        </Field>
+        <Item variant="outline" size="sm" asChild>
+            <label htmlFor={id} className="cursor-pointer">
+                <ItemContent>
+                    <ItemTitle>{label}</ItemTitle>
+                    <ItemDescription>{hint}</ItemDescription>
+                </ItemContent>
+                <ItemActions>
+                    <Switch id={id} checked={checked} onCheckedChange={onChange} />
+                </ItemActions>
+            </label>
+        </Item>
     );
 }
 

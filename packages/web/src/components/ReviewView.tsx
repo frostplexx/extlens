@@ -57,6 +57,7 @@ export function ReviewView({
     submitting,
     submitError,
     onExit,
+    onOpenUrl,
 }: {
     queue: ReviewQueue;
     profile: ExtensionProfile | null;
@@ -74,6 +75,7 @@ export function ReviewView({
     submitting: boolean;
     submitError: string | null;
     onExit: () => void;
+    onOpenUrl?: (url: string) => void;
 }) {
     /**
      * Auto-launch fires once per extension, keyed on the id whose files have arrived. Without the
@@ -131,6 +133,7 @@ export function ReviewView({
                                 onSubmit={onSubmitReport}
                                 submitting={submitting}
                                 error={submitError}
+                                onOpenUrl={onOpenUrl}
                                 submitLabel={queue.hasNext ? "Save & next" : "Save & finish"}
                                 footer={
                                     <Tooltip>
@@ -277,20 +280,6 @@ function Subject({ profile, report }: { profile: ExtensionProfile; report: Repor
                 />
             </dl>
 
-            <Separator className="my-4" />
-
-            <h3 className="mb-2 text-sm font-medium">Listeners ({profile.listeners.length})</h3>
-            {profile.listeners.length === 0 ? (
-                <p className="text-sm text-muted-foreground">None detected.</p>
-            ) : (
-                <ul className="space-y-1">
-                    {profile.listeners.map((l) => (
-                        <li key={`${l.api}:${l.file}:${l.line}`} className="truncate" title={`${l.file}:${l.line}`}>
-                            <Mono>{l.api}</Mono>
-                        </li>
-                    ))}
-                </ul>
-            )}
         </aside>
     );
 }

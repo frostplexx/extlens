@@ -3,7 +3,7 @@
  * false positive costs one "not testable" row, a false negative loses the observation entirely.
  */
 import { describe, expect, it } from "vitest";
-import { detectSurfaces } from "../src/surfaces.js";
+import { detectSurfaces, listenersBySurface, surfaceForListener } from "../src/surfaces.js";
 import type { Manifest, SourceFile } from "../src/types.js";
 
 const js = (path: string, content: string): SourceFile => ({ path, type: "js", content });
@@ -131,5 +131,38 @@ describe("toolbar actions and runtime popups", () => {
     it("keeps the manifest's evidence for a declared popup", () => {
         const [found] = detectSurfaces({ browser_action: { default_popup: "p.html" } } as Manifest, []);
         expect(found.evidence).toBe("browser_action.default_popup: p.html");
+    });
+});
+
+describe("listeners as evidence about a surface", () => {
+    it("routes a listener to the surface a reviewer can actually see", () => {
+        // You cannot watch contextMenus.onClicked fire; you can watch the menu entry do something.
+        expect(surfaceForListener("chrome.contextMenus.onClicked")).toBe("context_menu");
+        expect(surfaceForListener("chrome.action.onClicked")).toBe("toolbar_action");
+        expect(surfaceForListener("chrome.commands.onCommand")).toBe("keyboard_shortcuts");
+        expect(surfaceForListener("chrome.notifications.onClicked")).toBe("notifications");
+    });
+
+    it("treats plumbing listeners as background behaviour", () => {
+        expect(surfaceForListener("chrome.runtime.onMessage")).toBe("background");
+        expect(surfaceForListener("chrome.tabs.onUpdated")).toBe("background");
+        expect(surfaceForListener("chrome.webRequest.onBeforeRequest")).toBe("background");
+    });
+
+    it("returns null for an API that says nothing about the UI", () => {
+        expect(surfaceForListener("chrome.i18n.getMessage")).toBeNull();
+    });
+
+    it("groups listeners under their surface, keeping order", () => {
+        const grouped = listenersBySurface([
+            { api: "chrome.runtime.onMessage" },
+            { api: "chrome.contextMenus.onClicked" },
+            { api: "chrome.tabs.onUpdated" },
+        ]);
+        expect(grouped.get("background")?.map((l) => l.api)).toEqual([
+            "chrome.runtime.onMessage",
+            "chrome.tabs.onUpdated",
+        ]);
+        expect(grouped.get("context_menu")?.map((l) => l.api)).toEqual(["chrome.contextMenus.onClicked"]);
     });
 });

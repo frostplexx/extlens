@@ -37,7 +37,7 @@ const form: ReportDraftForm = {
 };
 
 describe("report form", () => {
-  it("renders ExtPorter fields in order", async () => {
+  it("renders the quick assessment, with no listener or overall rows", async () => {
     const rows = buildReportRows({ hasPopup: true, hasSettings: true, isNewTab: true, listenerCount: 2 });
     const out = await capture(
       React.createElement(ReportForm, {
@@ -62,12 +62,12 @@ describe("report form", () => {
     expect(out).toContain("Is Settings Working");
     expect(out).toContain("Is New Tab Working");
     expect(out).toContain("Is Interesting");
-    expect(out).toContain("Overall Working");
     expect(out).toContain("Notes (optional)");
     expect(out).toContain("Submit");
-    expect(out).toContain("works");
-    expect(out).not.toContain("errors seen");
-    expect(out).not.toContain("seems slower");
+    // Listeners are evidence about a surface, not a thing a reviewer can watch happen, and the
+    // overall verdict is computed from the surface results rather than asked for.
+    expect(out).not.toContain("Overall Working");
+    expect(out).not.toContain("chrome.tabs.onUpdated");
   });
 
   it("hides conditional rows when the manifest lacks them", async () => {
@@ -86,7 +86,7 @@ describe("report form", () => {
     expect(out).not.toContain("Is Popup Working");
     expect(out).not.toContain("Is Settings Working");
     expect(out).not.toContain("Is New Tab Working");
-    expect(out).toContain("Overall Working");
+    expect(out).not.toContain("Overall Working");
   });
 });
 

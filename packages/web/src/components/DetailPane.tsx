@@ -61,6 +61,7 @@ export function DetailPane({
     onSubmitReport,
     submitting,
     submitError,
+    onOpenUrl,
 }: {
     profile: ExtensionProfile | null;
     files: FileRefs | null;
@@ -74,6 +75,7 @@ export function DetailPane({
     onSubmitReport: (draft: ReportDraft) => void;
     submitting: boolean;
     submitError: string | null;
+    onOpenUrl?: (url: string) => void;
 }) {
     if (loading) {
         return (
@@ -173,6 +175,7 @@ export function DetailPane({
                             onSubmit={onSubmitReport}
                             submitting={submitting}
                             error={submitError}
+                            onOpenUrl={onOpenUrl}
                         />
                     </TabsContent>
 

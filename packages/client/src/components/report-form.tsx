@@ -30,7 +30,14 @@ export type FormRow =
   | { kind: "listener"; index: number }
   | { kind: "surface"; surface: UiSurface };
 
-/** Visible row order: listeners, then the ExtPorter quick assessment. */
+/**
+ * Visible row order: the surfaces this extension exposes, then the quick assessment.
+ *
+ * Listeners are no longer rows. A reviewer cannot watch `chrome.contextMenus.onClicked` fire —
+ * only the menu entry doing something — so a listener is evidence about a surface, not a thing to
+ * judge, and it is shown under the surface it exercises instead. The overall verdict is likewise
+ * gone: it is computed from the surface results (protocol/verdict.ts) rather than asked for.
+ */
 export function buildReportRows(opts: {
   hasPopup: boolean;
   hasSettings: boolean;
@@ -40,7 +47,6 @@ export function buildReportRows(opts: {
   surfaces?: DetectedSurface[];
 }): FormRow[] {
   const rows: FormRow[] = [];
-  for (let i = 0; i < opts.listenerCount; i += 1) rows.push({ kind: "listener", index: i });
   const surfaces = opts.surfaces ?? [];
   for (const { surface } of surfaces) rows.push({ kind: "surface", surface });
   rows.push({ kind: "boolean", field: "installs" });
@@ -54,7 +60,6 @@ export function buildReportRows(opts: {
     if (opts.isNewTab) rows.push({ kind: "boolean", field: "isNewTabWorking" });
   }
   rows.push({ kind: "boolean", field: "isInteresting" });
-  rows.push({ kind: "overall" });
   rows.push({ kind: "notes" });
   rows.push({ kind: "submit" });
   return rows;
