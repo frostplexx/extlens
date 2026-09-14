@@ -46,7 +46,7 @@ export function SurfaceTable({
     contentScriptMatches?: string[];
     onOpenUrl?: (url: string) => void;
     /** Detected listeners, shown under the surface each one exercises. */
-    listeners?: { api: string; file: string; line: number | null }[];
+    listeners?: { api: string; file: string; line: number | null; kind?: "listener" | "call" }[];
 }) {
     if (detected.length === 0) {
         return (
@@ -97,6 +97,11 @@ export function SurfaceTable({
                                     <ul className="pt-1">
                                         {(bySurface.get(surface) ?? []).map((l) => (
                                             <li key={`${l.api}:${l.file}:${l.line}`} className="truncate">
+                                                {/* "creates" is a thing to go and look for; "on" is
+                                                    a thing to trigger. */}
+                                                <span className="text-xs text-muted-foreground/50">
+                                                    {l.kind === "call" ? "creates" : "on"}{" "}
+                                                </span>
                                                 <span className="font-mono text-xs text-muted-foreground/70">
                                                     {l.api}
                                                     <span className="text-muted-foreground/50">

@@ -168,3 +168,28 @@ describe("listeners as evidence about a surface", () => {
         expect(grouped.get("context_menu")?.map((l) => l.api)).toEqual(["chrome.contextMenus.onClicked"]);
     });
 });
+
+describe("routing the newly detected calls to a surface", () => {
+    it("sends a created context menu to the context menu surface", () => {
+        expect(surfaceForListener("chrome.contextMenus.create")).toBe("context_menu");
+    });
+
+    it("sends a badge to the toolbar button, which is where it appears", () => {
+        expect(surfaceForListener("chrome.action.setBadgeText")).toBe("toolbar_action");
+        expect(surfaceForListener("chrome.browserAction.setBadgeText")).toBe("toolbar_action");
+    });
+
+    it("sends a runtime setPopup to the popup rather than the button", () => {
+        expect(surfaceForListener("chrome.action.setPopup")).toBe("popup");
+    });
+
+    it("sends injection APIs to page interaction", () => {
+        expect(surfaceForListener("chrome.scripting.executeScript")).toBe("page_interaction");
+        expect(surfaceForListener("chrome.tabs.executeScript")).toBe("page_interaction");
+    });
+
+    it("sends notifications and alarms where they belong", () => {
+        expect(surfaceForListener("chrome.notifications.create")).toBe("notifications");
+        expect(surfaceForListener("chrome.alarms.create")).toBe("background");
+    });
+});

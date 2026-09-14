@@ -44,6 +44,13 @@ export interface Listener {
   file: string; // path within the extension
   line: number; // 1-indexed
   snippet: string; // trimmed line, capped at 100 chars
+  /**
+   * Whether the extension REACTS to this event or CREATES this thing.
+   *
+   * A reviewer reads the two differently: a listener is something to trigger, a call is something
+   * to go and look for (a menu entry, a notification, a badge).
+   */
+  kind: "listener" | "call";
 }
 
 export interface AnalysisProfile {

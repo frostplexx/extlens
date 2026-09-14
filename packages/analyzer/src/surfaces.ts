@@ -152,14 +152,19 @@ export function detectSurfaces(manifest: Manifest, files: SourceFile[]): Detecte
  * telling the reviewer *which* surface turns a list of API names into "here is what to exercise".
  */
 const LISTENER_SURFACES: { pattern: RegExp; surface: UiSurface }[] = [
-    { pattern: /\.(action|browserAction|pageAction)\.onClicked/, surface: "toolbar_action" },
     { pattern: /\.contextMenus\./, surface: "context_menu" },
     { pattern: /\.commands\.onCommand/, surface: "keyboard_shortcuts" },
     { pattern: /\.notifications\./, surface: "notifications" },
     { pattern: /\.omnibox\./, surface: "omnibox" },
     { pattern: /\.sidePanel\./, surface: "side_panel" },
     { pattern: /\.devtools\./, surface: "devtools" },
-    { pattern: /\.(webNavigation|webRequest|tabs|windows|alarms|runtime|storage|idle|cookies)\./, surface: "background" },
+    // The badge lives on the toolbar button, so it is that surface's evidence — and setPopup is
+    // how a popup gets attached at runtime, which belongs to the popup.
+    { pattern: /\.(action|browserAction|pageAction)\.setPopup/, surface: "popup" },
+    { pattern: /\.(action|browserAction|pageAction)\.(onClicked|setBadgeText|setTitle|setIcon)/, surface: "toolbar_action" },
+    { pattern: /\.pageAction\.show/, surface: "toolbar_action" },
+    { pattern: /\.scripting\.|\.tabs\.executeScript/, surface: "page_interaction" },
+    { pattern: /\.(webNavigation|webRequest|tabs|windows|alarms|runtime|storage|idle|cookies|downloads|tts|offscreen|declarativeNetRequest)\./, surface: "background" },
 ];
 
 /** The surface an API name belongs to, or null when it says nothing about the UI. */

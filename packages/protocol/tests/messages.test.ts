@@ -186,13 +186,21 @@ describe("extensions.list result", () => {
 
 describe("extensions.get result", () => {
   test("round-trips a profile", () => {
-    // `surfaces` defaults in for a profile written before surface detection existed.
-    expect(ExtensionProfileSchema.parse(profile)).toEqual({ ...profile, surfaces: [] });
+    // `surfaces` and each listener's `kind` default in for a profile written before they existed.
+    expect(ExtensionProfileSchema.parse(profile)).toEqual({
+      ...profile,
+      surfaces: [],
+      listeners: profile.listeners.map((l) => ({ ...l, kind: "listener" })),
+    });
   });
 
   test("round-trips the extensions.get result wrapper", () => {
     expect(MethodsSchema["extensions.get"].result.parse({ extension: profile })).toEqual({
-      extension: { ...profile, surfaces: [] },
+      extension: {
+        ...profile,
+        surfaces: [],
+        listeners: profile.listeners.map((l) => ({ ...l, kind: "listener" })),
+      },
     });
   });
 

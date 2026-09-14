@@ -57,9 +57,19 @@ describe("listener extraction rules", () => {
     expect(tabs?.line).toBe(4);
   });
 
-  test("ignores non-js files", () => {
-    const withHtml = [...files, { path: "popup.html", type: "html" as const, content: "chrome.runtime.onMessage.addListener()" }];
-    expect(extractListeners(withHtml)).toHaveLength(4);
+  test("reads inline scripts in HTML, where popup logic often lives", () => {
+    // Skipping HTML meant an extension whose whole UI is a popup could report no events at all.
+    const withHtml = [
+      ...files,
+      { path: "popup.html", type: "html" as const, content: "<script>chrome.tabs.onRemoved.addListener(() => {})</script>" },
+    ];
+    const found = extractListeners(withHtml);
+    expect(found.some((l) => l.api === "chrome.tabs.onRemoved" && l.file === "popup.html")).toBe(true);
+  });
+
+  test("ignores files that are neither script nor markup", () => {
+    const withCss = [...files, { path: "a.css", type: "css" as const, content: "chrome.runtime.onMessage.addListener()" }];
+    expect(extractListeners(withCss).some((l) => l.file === "a.css")).toBe(false);
   });
 
   test("matches browser.* namespace", () => {
@@ -72,5 +82,50 @@ describe("listener extraction rules", () => {
 describe("minimal listeners", () => {
   test("none extracted", () => {
     expect(extractListeners(loadFixture("corpus-a/minimal").files)).toEqual([]);
+  });
+});
+
+describe("things the reviewer has to go and look for", () => {
+  const from = (content: string) => extractListeners([{ path: "bg.js", type: "js" as const, content }]);
+
+  test("finds a right-click entry, which arrives through create() and not a listener", () => {
+    const found = from("chrome.contextMenus.create({ id: 'x', title: 'Do it' });");
+    expect(found.map((l) => l.api)).toEqual(["chrome.contextMenus.create"]);
+    expect(found[0].kind).toBe("call");
+  });
+
+  test("finds notifications, badges and alarms", () => {
+    expect(from("chrome.notifications.create({})").map((l) => l.api)).toEqual(["chrome.notifications.create"]);
+    expect(from("chrome.action.setBadgeText({text:'1'})").map((l) => l.api)).toEqual(["chrome.action.setBadgeText"]);
+    expect(from("chrome.alarms.create('tick', {})").map((l) => l.api)).toEqual(["chrome.alarms.create"]);
+  });
+
+  test("finds the MV2 spellings too", () => {
+    expect(from("chrome.browserAction.setBadgeText({})").map((l) => l.api)).toEqual([
+      "chrome.browserAction.setBadgeText",
+    ]);
+  });
+
+  test("tags a listener as a listener", () => {
+    expect(from("chrome.contextMenus.onClicked.addListener(() => {})")[0]).toMatchObject({
+      api: "chrome.contextMenus.onClicked",
+      kind: "listener",
+    });
+  });
+});
+
+describe("namespaces that nest", () => {
+  const from = (content: string) => extractListeners([{ path: "d.js", type: "js" as const, content }]);
+
+  test("finds a two-level namespace", () => {
+    expect(from("chrome.devtools.network.onRequestFinished.addListener(() => {})").map((l) => l.api)).toEqual([
+      "chrome.devtools.network.onRequestFinished",
+    ]);
+  });
+
+  test("finds addRules registrations, not just addListener", () => {
+    expect(from("chrome.declarativeContent.onPageChanged.addRules([])").map((l) => l.api)).toEqual([
+      "chrome.declarativeContent.onPageChanged",
+    ]);
   });
 });

@@ -130,6 +130,11 @@ export const ListenerSchema = z.object({
   file: z.string().min(1),
   line: z.number().int().nonnegative(),
   snippet: z.string(),
+  /**
+   * "listener" reacts to an event; "call" creates something the user can see. Defaults for
+   * profiles computed before the distinction existed.
+   */
+  kind: z.enum(["listener", "call"]).default("listener"),
 });
 
 export const BackgroundSummarySchema = z.object({
