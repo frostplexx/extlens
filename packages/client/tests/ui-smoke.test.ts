@@ -6,8 +6,13 @@ import type { ExtensionLight, ListStats } from "@extlens/protocol";
 import { Explorer } from "../src/components/explorer.js";
 import { Analyzer } from "../src/components/analyzer.js";
 import { StatusBar } from "../src/components/status-bar.js";
-import { TopBar, HostStatusView, LogView, HelpView, listPageSize, formatError, isCompact, MIN_ROWS } from "../src/components/ui.js";
-import type { AnalyzerState, ExplorerState } from "../src/types.js";
+import { TopBar, HostStatusView, formatError } from "../src/components/ui.js";
+import { LogView } from "../src/components/log.js";
+import { HelpView } from "../src/components/help.js";
+import { CHROME_ROWS, CHROME_ROWS_COMPACT, isCompact, listPageSize, MIN_ROWS } from "../src/layout.js";
+import type { AnalyzerSubject } from "../src/state/useAnalyzer.js";
+import type { Browsers } from "../src/state/useBrowsers.js";
+import type { ExplorerState } from "../src/types.js";
 
 /**
  * Renders the tab components through ink and asserts on the plain-text
@@ -57,7 +62,7 @@ function explorerState(over: Partial<ExplorerState>): ExplorerState {
   };
 }
 
-const analyzerState: AnalyzerState = {
+const subject: AnalyzerSubject = {
   id: "e1",
   profile: {
     id: "e1",
@@ -120,43 +125,45 @@ const analyzerState: AnalyzerState = {
   report: null,
   loading: false,
   error: null,
+  scroll: 0,
+};
+
+/** Browser state is session state, so the analyzer takes it as a separate prop. */
+const browsers: Browsers = {
   mv2: { phase: "loaded", message: "ready", extensionId: "a" },
   mv3: { phase: "idle", message: null, extensionId: null },
-  formOpen: false,
   prompts: [],
-  scroll: 0,
+  launch: async () => {},
+  closeAll: async () => {},
+  answerPrompt: () => {},
 };
 
 describe("ui rendering", () => {
   it("sizes list pages to the terminal", () => {
-    // One row smaller than before: the list panel now carries a column-header row.
-    expect(listPageSize(24)).toBe(8);
-    expect(listPageSize(50)).toBe(34);
-    expect(listPageSize(undefined)).toBe(8);
+    expect(listPageSize(24)).toBe(24 - CHROME_ROWS);
+    expect(listPageSize(50)).toBe(50 - CHROME_ROWS);
+    expect(listPageSize(undefined)).toBe(24 - CHROME_ROWS);
     // Short terminals switch to compact chrome and may shrink to a single row. The old
     // five-row floor forced a 21-row frame, which overflowed every terminal below that.
-    expect(listPageSize(20)).toBe(7);
-    expect(listPageSize(14)).toBe(1);
+    expect(listPageSize(MIN_ROWS)).toBe(1);
     expect(listPageSize(10)).toBe(1);
   });
 
   it("keeps the whole frame within the terminal height", () => {
     // Regression: the frame was always >= 21 rows, so anything shorter scrolled its own
     // top off screen. chrome + list must never exceed the terminal.
-    for (const rows of [14, 16, 18, 20, 24, 30, 40]) {
-      const chrome = isCompact(rows) ? 13 : 16;
+    for (const rows of [MIN_ROWS, 16, 18, 20, 24, 30, 40]) {
+      const chrome = isCompact(rows) ? CHROME_ROWS_COMPACT : CHROME_ROWS;
       expect(chrome + listPageSize(rows)).toBeLessThanOrEqual(rows);
     }
-    expect(MIN_ROWS).toBe(14);
   });
 
   it("renders the menu bar with brand and connection status", async () => {
-    const out = await capture(React.createElement(TopBar, { status: "connected" }));
+    const out = await capture(React.createElement(TopBar, { status: "connected", scope: "explorer" }));
     expect(out).toContain("extlens");
     expect(out).toContain("connected");
-    expect(out).not.toContain("Explorer");
-    expect(out).not.toContain("Analyzer");
-    expect(out).not.toContain("Log");
+    // The breadcrumb says where you are; there is still no tab bar to click.
+    expect(out).toContain("explorer");
   });
 
   it("renders each connection state in the menu bar", async () => {
@@ -199,10 +206,12 @@ describe("ui rendering", () => {
       stream: (i % 2 === 0 ? "stdout" : "stderr") as "stdout" | "stderr",
       text: `entry-${String(i + 1).padStart(2, "0")}`,
     }));
+    // An explicit budget, because the point of the assertion is the arithmetic: the view gets
+    // 12 rows, spends 4 on its own chrome, and must say how many lines that cost.
     const out = await capture(
-      React.createElement(LogView, { status: null, lines, error: null }),
+      React.createElement(LogView, { status: null, lines, error: null, height: 12 }),
     );
-    expect(out).toContain("… 7 earlier lines omitted");
+    expect(out).toContain("… 12 earlier lines omitted");
     expect(out).toContain("entry-20");
     expect(out).not.toContain("entry-01");
   });
@@ -304,30 +313,27 @@ describe("ui rendering", () => {
   });
 
   it("renders the help overlay with every key group", async () => {
-    const out = await capture(React.createElement(HelpView), { rows: 60 });
+    const out = await capture(React.createElement(HelpView, { height: 50 }), { rows: 60 });
     expect(out).toContain("keyboard help");
     expect(out).toContain("navigation");
     expect(out).toContain("explorer");
     expect(out).toContain("analyzer");
-    expect(out).toContain("migrate all / stop host job");
-    expect(out).toContain("record a report");
+    expect(out).toContain("migrate all / stop the host job");
+    expect(out).toContain("record a verification report");
     expect(out).toContain("list markers");
     expect(out).toContain("a report has been recorded");
   });
 
   it("renders analyzer tags and breakdown bars", async () => {
-    const state = {
-      ...analyzerState,
-      profile: { ...analyzerState.profile!, tags: ["webpack", "minified"] },
-    };
-    const out = await capture(React.createElement(Analyzer, { state }));
+    const tagged = { ...subject, profile: { ...subject.profile!, tags: ["webpack", "minified"] } };
+    const out = await capture(React.createElement(Analyzer, { subject: tagged, browsers }));
     expect(out).toContain("tags");
     expect(out).toContain("[webpack]");
     expect(out).toContain("█");
   });
 
   it("renders analyzer sections and browser rows", async () => {
-    const out = await capture(React.createElement(Analyzer, { state: { ...analyzerState, scroll: 0 } }), { rows: 60 });
+    const out = await capture(React.createElement(Analyzer, { subject: { ...subject, scroll: 0 }, browsers }), { rows: 60 });
     expect(out).toContain("breakdown");
     expect(out).toContain("manifest (mv3)");
     expect(out).toContain("jfpmipfmnoleakbnehmhhoefgofjilba");
@@ -337,7 +343,7 @@ describe("ui rendering", () => {
 
   it("scrolls the analyzer to reveal lower sections", async () => {
     const out = await capture(
-      React.createElement(Analyzer, { state: { ...analyzerState, scroll: 1000 } }),
+      React.createElement(Analyzer, { subject: { ...subject, scroll: 1000 }, browsers }),
     );
     expect(out).toContain("DeepAli (mv2)");
     expect(out).toContain("listeners");

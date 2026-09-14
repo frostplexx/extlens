@@ -4,6 +4,7 @@ import stringWidth from "string-width";
 import type { ExtensionLight, HostStatus, ListStats, SortOrder } from "@extlens/protocol";
 import type { ExplorerState } from "../types.js";
 import { c } from "../theme.js";
+import { CHROME, splitPanes } from "../layout.js";
 import {
   EmptyLine,
   ErrorLine,
@@ -36,6 +37,12 @@ export function nameWidthFor(panelWidth: number): number {
   const content = panelWidth - 4; // round border (2) + paddingX 1 each side (2)
   return Math.max(NAME_W_MIN, content - ROW_CHROME_W);
 }
+/**
+ * Key/value rows the details pane renders. Used as the unconstrained panel height so that a
+ * caller which passes no pageSize (unit renders) still gets a panel tall enough to show them all.
+ */
+const DETAIL_ROWS = 8;
+
 const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
 const SORT_LABELS: Record<SortOrder, string> = {
@@ -176,6 +183,7 @@ function DetailRow({ label, children }: { label: string; children: React.ReactNo
   );
 }
 
+/** Rows the details pane wants when nothing constrains it; see DETAIL_ROWS. */
 function Details({ light, maxRows }: { light: ExtensionLight; maxRows?: number }) {
   const rows: [string, React.ReactNode][] = [
     ["Name", <Text bold>{light.name}</Text>],
@@ -231,15 +239,16 @@ export function Explorer({
   // ignores pagination or a stale state lingers between fetches.
   const lights = state.lights.slice(0, pageSize ?? state.lights.length);
   const selected = lights[selectedIndex] ?? null;
-  const cols = useColumns();
   const gap = 1;
-  const listWidth = Math.max(30, Math.floor((cols - gap) / 2));
-  const detailsWidth = Math.max(30, cols - gap - listWidth);
-  // The list panel keeps a fixed height: pad short pages (or empty/error
-  // states) to the page size so the whole UI does not shrink and expose
-  // stale lines from a previous frame.
-  const renderedRows = error ? 1 : lights.length === 0 ? 1 : lights.length;
-  const padCount = Math.max(0, (pageSize ?? lights.length) - renderedRows);
+  const { list: listWidth, details: detailsWidth } = splitPanes(useColumns(), gap);
+  // Both panels take a fixed height, so a half-filled last page, an empty search result and an
+  // error all draw the same frame. Height, not padding: padding assumes every row is exactly one
+  // line tall, and a wrapped line would silently grow the frame past the terminal.
+  const panelHeight = (pageSize ?? Math.max(lights.length, DETAIL_ROWS)) + CHROME.listFrame;
+  // Rows a panel has for content, after its border (2) and title (1). Content must be clamped to
+  // this: ink resolves an overflowing fixed-height box by clipping the TOP of it, which looks
+  // like corrupted output rather than like truncation.
+  const innerRows = Math.max(1, panelHeight - 3);
   const nameWidth = nameWidthFor(listWidth);
 
   return (
@@ -259,7 +268,7 @@ export function Explorer({
       </Box>
 
       <Box flexDirection="row" columnGap={gap} width="100%">
-        <Panel title={`Extensions (${stats?.total ?? lights.length})`} width={listWidth}>
+        <Panel title={`Extensions (${stats?.total ?? lights.length})`} width={listWidth} height={panelHeight}>
           <ListHeader nameWidth={nameWidth} />
           {error ? (
             <ErrorLine message={error} />
@@ -270,7 +279,7 @@ export function Explorer({
               <EmptyLine label={search ? "no extensions match the search" : "no extensions yet"} />
             )
           ) : (
-            lights.map((light, i) => (
+            lights.slice(0, innerRows - 1).map((light, i) => (
               <LightRow
                 key={light.id}
                 light={light}
@@ -280,13 +289,10 @@ export function Explorer({
               />
             ))
           )}
-          {Array.from({ length: padCount }).map((_, i) => (
-            <Text key={`pad-${i}`}> </Text>
-          ))}
         </Panel>
-        <Panel title="Details" width={detailsWidth}>
+        <Panel title="Details" width={detailsWidth} height={panelHeight}>
             {selected ? (
-              <Details light={selected} maxRows={pageSize} />
+              <Details light={selected} maxRows={innerRows} />
             ) : (
               <Text color={c.muted}>select an extension to view details</Text>
             )}

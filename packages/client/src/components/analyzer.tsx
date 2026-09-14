@@ -1,10 +1,13 @@
 import React from "react";
 import { Box, Text, useStdout } from "ink";
-import type { ExtensionProfile, ManifestSummary, ScoreBreakdown } from "@extlens/protocol";
+import type { ManifestSummary, ScoreBreakdown } from "@extlens/protocol";
 import { BROWSER_DIR } from "../browsers/install.js";
-import type { AnalyzerState, BrowserPhase, BrowserState } from "../types.js";
+import { contentRows } from "../layout.js";
+import type { AnalyzerSubject } from "../state/useAnalyzer.js";
+import type { Browsers } from "../state/useBrowsers.js";
+import type { BrowserPhase, BrowserState } from "../types.js";
 import { c } from "../theme.js";
-import { EmptyLine, ErrorLine, Loading, Rule, bar, scoreBar, scoreTone } from "./ui.js";
+import { EmptyLine, ErrorLine, Loading, Rule, ScrollView, bar, scoreBar, scoreTone } from "./ui.js";
 
 const BREAKDOWN_LABELS: [keyof ScoreBreakdown, string][] = [
   ["webRequest", "webRequest"],
@@ -96,8 +99,17 @@ function pushSection(lines: React.ReactNode[], key: string, title: string, hint?
   lines.push(<Rule key={`${key}-rule`} />);
 }
 
-export function Analyzer({ state }: { state: AnalyzerState }) {
-  const { profile, report, loading, error, mv2, mv3, files, prompts, scroll } = state;
+/**
+ * The profile screen: score breakdown, both manifests, listeners, browser state and the saved
+ * report, rendered as flat one-line rows and windowed by `subject.scroll`.
+ *
+ * Browser state arrives as a separate prop rather than living on the subject: the browsers belong
+ * to the session, not to the extension, and keeping them apart is what lets the analyzer re-render
+ * on a download-progress tick without touching the loaded profile.
+ */
+export function Analyzer({ subject, browsers }: { subject: AnalyzerSubject; browsers: Browsers }) {
+  const { profile, report, loading, error, files, scroll } = subject;
+  const { mv2, mv3, prompts } = browsers;
   const prompt = prompts[0];
   const { stdout } = useStdout();
 
@@ -230,25 +242,6 @@ export function Analyzer({ state }: { state: AnalyzerState }) {
     lines.push(<EmptyLine key="report-none" label="no report yet — press r to record one" />);
   }
 
-  const rows = stdout.rows ?? 24;
-  // Reserve room for the menu bar (3) and status bar (3); the scroll
-  // indicator line is carved out of `visible` below when content overflows.
-  const visible = Math.max(6, rows - 6);
-  const overflowing = lines.length > visible;
-  const content = overflowing ? visible - 1 : visible;
-  const start = Math.min(scroll, Math.max(0, lines.length - content));
-  const shown = lines.slice(start, start + content);
-
-  return (
-    <Box flexDirection="column">
-      {shown.map((node, i) => (
-        <React.Fragment key={i}>{node}</React.Fragment>
-      ))}
-      {overflowing ? (
-        <Text color={c.muted}>
-          … {start + 1}-{start + content}/{lines.length} · ↑/↓ or j/k to scroll
-        </Text>
-      ) : null}
-    </Box>
-  );
+  // The frame's vertical budget is layout.ts's business, not this component's.
+  return <ScrollView lines={lines} height={contentRows(stdout.rows)} scroll={scroll} />;
 }

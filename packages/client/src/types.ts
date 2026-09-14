@@ -1,14 +1,12 @@
-import type {
-  ExtensionLight,
-  ExtensionProfile,
-  FileRefs,
-  ListStats,
-  OverallWorking,
-  Report,
-  SortOrder,
-} from "@extlens/protocol";
+import type { ExtensionLight, ListStats, OverallWorking, SortOrder } from "@extlens/protocol";
 
-/** UI state types for the client. */
+/**
+ * UI state shared across components.
+ *
+ * State that belongs to exactly one hook lives with that hook instead (AnalyzerSubject in
+ * state/useAnalyzer.ts, Browsers in state/useBrowsers.ts). Only shapes more than one module has
+ * to name are here.
+ */
 
 /** Which screen the client shows. There is no tab bar; enter/esc move between explorer and analyzer. */
 export type View = "explorer" | "analyzer" | "log";
@@ -42,23 +40,6 @@ export interface BrowserState {
   phase: BrowserPhase;
   message: string | null;
   extensionId: string | null;
-}
-
-export interface AnalyzerState {
-  id: string | null;
-  profile: ExtensionProfile | null;
-  files: FileRefs | null;
-  report: Report | null;
-  loading: boolean;
-  error: string | null;
-  mv2: BrowserState;
-  mv3: BrowserState;
-  /** True while the report form is open. */
-  formOpen: boolean;
-  /** Missing browsers queued for a download decision (FIFO). */
-  prompts: { label: "mv2" | "mv3"; message: string }[];
-  /** First visible line index when the analyzer content is taller than the terminal. */
-  scroll: number;
 }
 
 export interface ReportDraftForm {

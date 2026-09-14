@@ -10,7 +10,9 @@ import { render } from "ink";
 import { PassThrough } from "node:stream";
 import { Explorer } from "../src/components/explorer.js";
 import { ReportForm, buildReportRows } from "../src/components/report-form.js";
-import { LogView, HelpView, listPageSize, isCompact, MIN_ROWS } from "../src/components/ui.js";
+import { LogView } from "../src/components/log.js";
+import { HelpView } from "../src/components/help.js";
+import { CHROME, contentRows, isCompact, listPageSize, MIN_ROWS } from "../src/layout.js";
 
 /**
  * Render at a fixed terminal size and return the painted frame height.
@@ -54,9 +56,11 @@ const explorerState = {
 const HEIGHTS = [MIN_ROWS, 15, 16, 18, 20, 24, 30, 40];
 
 describe("views fit the terminal", () => {
-  // The explorer renders inside the app's chrome: menu bar (3) plus status bar, which is
-  // 3 rows normally and 2 in compact mode (its spacer row is dropped).
-  const appChrome = (rows: number) => (isCompact(rows) ? 5 : 6);
+  // The explorer renders inside the app's chrome: the top bar plus the status bar, and the
+  // status bar's spacer row unless the terminal is too short for it. Derived from layout.ts so
+  // this test cannot drift from the budget the components actually use.
+  const appChrome = (rows: number) =>
+    CHROME.topBar + CHROME.statusBar + (isCompact(rows) ? 0 : 1);
 
   it.each(HEIGHTS)("explorer at %i rows", async (rows) => {
     const h = await frameHeight(
@@ -76,7 +80,7 @@ describe("views fit the terminal", () => {
       seq: i, ts: "t", stream: "stdout" as const, text: `line ${i}`,
     }));
     const h = await frameHeight(
-      React.createElement(LogView, { status: null, lines, error: null }),
+      React.createElement(LogView, { status: null, lines, error: null, height: contentRows(rows) }),
       100,
       rows,
     );
@@ -84,7 +88,7 @@ describe("views fit the terminal", () => {
   });
 
   it.each(HEIGHTS)("help overlay at %i rows", async (rows) => {
-    const h = await frameHeight(React.createElement(HelpView), 100, rows);
+    const h = await frameHeight(React.createElement(HelpView, { height: contentRows(rows) }), 100, rows);
     expect(h).toBeLessThanOrEqual(rows - appChrome(rows));
   });
 

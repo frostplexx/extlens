@@ -21,7 +21,10 @@ export function StatusBar({
   sshLabel?: string | null;
   /** Tunnel state in ssh mode, or null for a local host. */
   tunnel?: TunnelStatus | null;
-  /** Contextual key hints for the active tab, or "" for none. */
+  /**
+   * Contextual key hints for the active scope. Callers pass `hintsFor(scope)` from the keymap
+   * rather than a literal, so the footer cannot advertise a key the dispatcher does not bind.
+   */
   hints?: string;
   /** Drop the spacer row above the rule so the frame fits a short terminal. */
   compact?: boolean;

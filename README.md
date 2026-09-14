@@ -78,17 +78,10 @@ npm run client -- --ssh user@host --remote-port 8081
 
 ## Client keybindings
 
-- `?` — keyboard help overlay
-- `/` — focus search; `ctrl+u` clears it; `esc` closes it
-- `s` — cycle sort (interestingness desc / asc / name)
-- `↑`/`↓` or `j`/`k` — select an extension; `g`/`G` jump to first/last
-- `enter` — open the analyzer tab
-- `tab` — switch explorer ⇄ analyzer
-- `n`/`p` or PgUp/PgDn — previous / next page
-- `b` / `x` — launch / close test browsers (analyzer)
-- `r` — record a manual test report (analyzer)
-- `l` — host log; `m` — migrate / stop a host job (explorer)
-- `q` — quit
+Press `?` in the client for the full list. It is generated from
+`packages/client/src/keys/keymap.ts`, which is also what the dispatcher reads — so the help
+screen, the footer hints and the actual bindings cannot disagree. To add or change a key, edit
+that table and nothing else.
 
 Client environment:
 
@@ -135,6 +128,32 @@ packages/client     — ink TUI (private, not published)
 examples/           — stub host server over the fixtures
 fixtures/           — synthetic extensions with hand-computed golden scores
 ```
+
+### Client architecture
+
+The client is split so that each file answers one question, and `app.tsx` is only wiring:
+
+```
+src/app.tsx            — composition root: hooks in, screen out, keys dispatched. No RPC.
+src/layout.ts          — the vertical budget. Every fixed row of chrome is itemised here.
+src/keys/keymap.ts     — the binding table: chords, scopes, help text, footer hints.
+src/keys/useKeymap.ts  — dispatch, plus the modal "capture" stack (password, help, form, …).
+src/state/*.ts         — one hook per concern, each taking `client` and returning actions:
+                           useConnection  ws client + ssh tunnel + password prompt
+                           useHost        migration status, log tail, start/stop
+                           useExtensionList  paging, debounced search, sort, selection
+                           useAnalyzer    profile/files/report for one extension, advance
+                           useBrowsers    MV2/MV3 Chrome for Testing launch + download prompt
+                           useReportForm  the manual verification form and its submit
+src/components/*.tsx   — pure rendering: props in, ink nodes out.
+```
+
+Two rules keep it that way. Layout arithmetic lives only in `layout.ts` — a component that needs
+to know its height takes it as a prop, so no view can quietly render taller than the terminal
+(`tests/fits-terminal.test.ts` renders every view at eight sizes and measures). And keyboard
+input lives only in `keys/` — a component never calls `useInput` for a binding; it either gets a
+handler or, if it is modal, gets pushed onto the capture stack in `app.tsx`, where precedence is
+visible as array order.
 
 ## Docs
 
