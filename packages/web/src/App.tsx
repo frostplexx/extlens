@@ -16,6 +16,8 @@ import { Kbd } from "@/components/ui/kbd";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import type { ReportRow } from "@extlens/protocol";
+import { download, exportFilename, reportsToCsv, reportsToJson } from "./lib/export-reports";
 import { useBridge } from "./hooks/useBridge";
 import { useExtensions } from "./hooks/useExtensions";
 import { useHostJob } from "./hooks/useHostJob";
@@ -51,6 +53,7 @@ export function App() {
     const host = useHostJob(bridge, connected, list.refresh);
 
     const [logOpen, setLogOpen] = useState(false);
+    const [exporting, setExporting] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState<string | null>(null);
     const searchRef = useRef<HTMLInputElement>(null);
@@ -82,6 +85,30 @@ export function App() {
         },
         [bridge],
     );
+
+    /**
+     * Download every saved report.
+     *
+     * Both formats in one click: the CSV is the shape the corpus questions are asked in, and the
+     * JSON keeps what the columns flatten away. Choosing between them at the moment of export is a
+     * decision with no information behind it.
+     */
+    const exportReports = useCallback(() => {
+        setExporting(true);
+        bridge
+            .call<{ reports: ReportRow[] }>("reports.list")
+            .then((r) => {
+                if (r.reports.length === 0) {
+                    toast.info("No reports saved yet");
+                    return;
+                }
+                download(exportFilename("csv"), reportsToCsv(r.reports), "text/csv");
+                download(exportFilename("json"), reportsToJson(r.reports), "application/json");
+                toast.success(`Exported ${r.reports.length} report${r.reports.length === 1 ? "" : "s"}`);
+            })
+            .catch((e: Error) => toast.error(e.message))
+            .finally(() => setExporting(false));
+    }, [bridge]);
 
     // A starting job opens the dock once. Having to go find the log to learn a batch began is a
     // small papercut that recurs every single run.
@@ -178,10 +205,17 @@ export function App() {
                 <TopBar
                     status={bridge.status}
                     session={bridge.session}
-                    host={{ status: host.status, supported: host.supported, running: host.running }}
+                    host={{
+                        status: host.status,
+                        supported: host.supported,
+                        running: host.running,
+                        model: host.status?.model ?? null,
+                    }}
                     onToggleHost={host.toggle}
                     mode={mode}
                     onModeChange={setMode}
+                    onExport={exportReports}
+                    exporting={exporting}
                 />
 
                 {mode === "review" ? (

@@ -14,6 +14,7 @@ import type {
   ManifestSummarySchema,
   OverallWorkingSchema,
   ReportDraftSchema,
+  ReportRowSchema,
   ReportSchema,
   ScoreBreakdownSchema,
   SortOrderSchema,
@@ -46,6 +47,7 @@ export type HostStatus = z.infer<typeof HostStatusSchema>;
 export type LogLine = z.infer<typeof LogLineSchema>;
 export type HostLogResult = z.infer<typeof HostLogResultSchema>;
 
+export type ReportRow = z.infer<typeof ReportRowSchema>;
 export type UiSurface = z.infer<typeof UiSurfaceSchema>;
 export type SurfaceStatus = z.infer<typeof SurfaceStatusSchema>;
 export type SurfaceResult = z.infer<typeof SurfaceResultSchema>;

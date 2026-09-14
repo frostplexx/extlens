@@ -94,6 +94,13 @@ export async function dispatch(backend: Backend, request: RpcRequest): Promise<R
         result = { report: await backend.getReport(extensionId) };
         break;
       }
+      case "reports.list": {
+        if (!backend.listReports) {
+          throw new RpcError(ErrorCodes.METHOD_NOT_FOUND, "this host cannot enumerate its reports");
+        }
+        result = { reports: await backend.listReports() };
+        break;
+      }
       case "reports.submit": {
         const { report } = params as { report: never };
         const id = await backend.submitReport(report);

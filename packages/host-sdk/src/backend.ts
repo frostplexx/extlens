@@ -1,4 +1,5 @@
 import type {
+  ReportRow,
   FileRefs,
   HostLogResult,
   HostStatus,
@@ -64,6 +65,15 @@ export interface Backend {
 
   /** Store (or replace) the report. Returns the report id. */
   submitReport(report: ReportDraft): Promise<string>;
+
+  /**
+   * Every stored report, for export.
+   *
+   * Optional: a backend that cannot enumerate its reports simply does not offer the export, rather
+   * than the client having to fetch them one extension at a time — which for a corpus of hundreds
+   * is a request storm to answer a question the host can answer in one query.
+   */
+  listReports?(): Promise<ReportRow[]>;
 
   /** Optional host lifecycle controller (migration start/stop/status). */
   host?: HostController;

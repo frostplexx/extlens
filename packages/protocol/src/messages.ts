@@ -309,6 +309,22 @@ export const ReportSchema = ReportDraftSchema.extend({
   updatedAt: z.string(),
 });
 
+/**
+ * One row of an export: the report plus the extension's name.
+ *
+ * The name is included because an export is read by a person and a 32-character id is not a name.
+ * It is not stored in the report itself — a report is about one extension at one moment, while the
+ * name comes from whatever the manifest currently says.
+ */
+export const ReportRowSchema = z.object({
+  name: z.string(),
+  report: ReportSchema,
+});
+
+export const ReportsListResultSchema = z.object({
+  reports: z.array(ReportRowSchema),
+});
+
 // ---------------------------------------------------------------------------
 // host.status / host.start / host.stop
 // ---------------------------------------------------------------------------
@@ -328,6 +344,14 @@ export const HostStatusSchema = z.object({
   phase: z.string().nullable(),
   startedAt: z.string().nullable(),
   message: z.string().nullable(),
+  /**
+   * The model this host migrates with.
+   *
+   * Optional because not every host runs migrations at all. It is reported because a reviewer
+   * looking at a corpus has no other way to tell which model produced it — and a result table that
+   * cannot name its model is not a result.
+   */
+  model: z.string().nullable().optional(),
 });
 
 /** Which extension to start a host job (migration) for. */
@@ -383,6 +407,7 @@ export const MethodsSchema = {
     params: z.object({ extensionId: ExtensionIdSchema }),
     result: z.object({ report: ReportSchema.nullable() }),
   },
+  "reports.list": { params: z.object({}).optional(), result: ReportsListResultSchema },
   "reports.submit": {
     params: z.object({ report: ReportDraftSchema }),
     result: z.object({ id: z.string().min(1) }),

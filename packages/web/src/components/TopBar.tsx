@@ -7,7 +7,7 @@
  */
 import * as React from "react";
 import type { HostStatus } from "@extlens/protocol";
-import { ClipboardCheck, Play, Square, Table2, Terminal } from "lucide-react";
+import { ClipboardCheck, Cpu, Download, Play, Square, Table2, Terminal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -23,13 +23,17 @@ export function TopBar({
     onToggleHost,
     mode,
     onModeChange,
+    onExport,
+    exporting,
 }: {
     status: BridgeStatus;
     session: SessionState | null;
-    host: { status: HostStatus | null; supported: boolean; running: boolean };
+    host: { status: HostStatus | null; supported: boolean; running: boolean; model?: string | null };
     onToggleHost: () => void;
     mode: "browse" | "review";
     onModeChange: (mode: "browse" | "review") => void;
+    onExport: () => void;
+    exporting: boolean;
 }) {
     const link =
         status !== "open"
@@ -94,6 +98,30 @@ export function TopBar({
             ) : null}
 
             <div className="ml-auto flex items-center gap-3">
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button size="sm" variant="outline" onClick={onExport} disabled={exporting}>
+                            <Download className="size-4" />
+                            <span className="hidden md:inline">Export</span>
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Download every saved report as CSV and JSON</TooltipContent>
+                </Tooltip>
+
+                {/* Which model produced this corpus. A results table that cannot name its model is
+                    not a result, and nothing else on screen says which one ran. */}
+                {host.model ? (
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Badge variant="outline" className="hidden max-w-56 truncate font-normal lg:inline-flex">
+                                <Cpu className="size-3" />
+                                {host.model}
+                            </Badge>
+                        </TooltipTrigger>
+                        <TooltipContent>Migrations on this host run with {host.model}</TooltipContent>
+                    </Tooltip>
+                ) : null}
+
                 {session?.ssh ? (
                     <Badge variant="outline" className="hidden max-w-48 truncate lg:inline-flex">
                         ssh {session.ssh}
