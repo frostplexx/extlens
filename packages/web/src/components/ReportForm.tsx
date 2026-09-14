@@ -7,7 +7,7 @@
  * assessments rather than left to the reviewer.
  */
 import * as React from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
     ExtensionProfile,
     OverallWorking,
@@ -37,6 +37,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import type { DetectedSurface } from "@extlens/protocol";
 import { Badge } from "@/components/ui/badge";
+import { propagate } from "@/lib/quick-assessment";
 import { Mono } from "./shared";
 import { SurfaceTable } from "./SurfaceTable";
 
@@ -120,15 +121,41 @@ export function ReportForm({
     const detected = useMemo(() => surfacesToAsk(profile), [profile]);
     const [startedAt, setStartedAt] = useState(() => Date.now());
     const [draft, setDraft] = useState<Draft>(() => initial(profile, saved));
+    /**
+     * Statuses as they were before "does not install" / "needs an account" overwrote them, so a
+     * mis-click costs a second toggle rather than the reviewer's work.
+     */
+    const snapshot = useRef<SurfaceResult[] | null>(null);
+
 
     // A new extension resets the answers and the verification clock; inheriting the previous
     // extension's form would quietly record the wrong thing.
     useEffect(() => {
         setDraft(initial(profile, saved));
         setStartedAt(Date.now());
+        // A snapshot belongs to the extension it was taken from; carrying it across would restore
+        // one extension's judgements onto another's form.
+        snapshot.current = null;
     }, [profile.id, saved]);
 
-    const set = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft((d) => ({ ...d, [key]: value }));
+    const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
+        setDraft((d) => {
+            const next = { ...d, [key]: value };
+            // Two of these four answers settle every surface below them; propagating saves the
+            // reviewer filling in an outcome that was already decided.
+            if (key !== "installs" && key !== "needsLogin") return next;
+            const result = propagate(next.surfaces, { installs: next.installs, needsLogin: next.needsLogin }, snapshot.current);
+            snapshot.current = result.snapshot;
+            return { ...next, surfaces: result.surfaces };
+        });
+
+    // Recomputed rather than stored: it is a statement about the current answers, and storing it
+    // would be one more thing to keep in step with them.
+    const propagated = propagate(draft.surfaces, { installs: draft.installs, needsLogin: draft.needsLogin }, snapshot.current)
+        .because;
+    // Only offer the undo when there is something to undo: a saved report that already said "needs
+    // an account" describes the same state without anything having been overwritten.
+    const canUndo = snapshot.current !== null;
 
     const summary = scoreSurfaces(draft.surfaces);
     const verdict = verdictFor(draft.surfaces);
@@ -207,8 +234,17 @@ export function ReportForm({
             <Field>
                 <FieldLabel>User-facing surfaces</FieldLabel>
                 <FieldDescription>
-                    Judge each surface the extension has. Leave one untested rather than guessing, and
-                    mark it “can’t test” when the harness is what is in the way.
+                    {propagated ? (
+                        <span className="text-peach">
+                            {propagated}
+                            {canUndo ? " Turn that answer back off to restore your judgements." : ""}
+                        </span>
+                    ) : (
+                        <>
+                            Judge each surface the extension has. Leave one untested rather than guessing, and
+                            mark it “can’t test” when the harness is what is in the way.
+                        </>
+                    )}
                 </FieldDescription>
                 <SurfaceTable
                     detected={detected}
