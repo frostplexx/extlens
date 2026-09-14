@@ -120,6 +120,9 @@ describe("FolderBackend", () => {
       overallWorking: "yes" as const,
       notes: "folder mode",
       listeners: [],
+      surfaces: [],
+      verdict: null,
+      score: null,
     };
     expect(await backend.submitReport(draft)).toBe(id);
     const after = await backend.listExtensions({ page: 1, pageSize: 1, sort: "name" });

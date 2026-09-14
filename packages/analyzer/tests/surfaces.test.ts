@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { detectSurfaces } from "../src/surfaces.js";
 import type { Manifest, SourceFile } from "../src/types.js";
 
-const js = (path: string, content: string): SourceFile => ({ path, type: "js", content, sizeBytes: content.length });
+const js = (path: string, content: string): SourceFile => ({ path, type: "js", content });
 
 function surfaces(manifest: Manifest, files: SourceFile[] = []): string[] {
     return detectSurfaces(manifest, files).map((s) => s.surface);
