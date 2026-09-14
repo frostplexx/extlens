@@ -39,7 +39,9 @@ export function reportsToCsv(rows: ReportRow[]): string {
 
     const lines = [header.join(",")];
     for (const { name, report } of rows) {
-        const bySurface = new Map(report.surfaces.map((s) => [s.surface, s]));
+        // Defensive: the host normalises old reports, but an export that throws loses the whole
+        // corpus to one malformed row, which is a bad trade for one `?? []`.
+        const bySurface = new Map((report.surfaces ?? []).map((s) => [s.surface, s]));
         lines.push(
             [
                 report.extensionId,

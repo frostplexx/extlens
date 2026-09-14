@@ -37,9 +37,19 @@ function formatZodError(error: unknown): string {
   return String(error);
 }
 
-function validateResult(method: MethodName, result: unknown): void {
+/**
+ * Validate the result AND send the parsed value.
+ *
+ * The parsed value is what goes on the wire, not the object the backend built. Schemas carry
+ * defaults, and those defaults exist precisely for data written before a field did: a report
+ * stored by an older version has no `surfaces` key, and a client that trusts the schema will call
+ * `.map` on it. Parsing and then discarding the result — which is what this did — computed every
+ * default and threw it away, so old rows reached the client exactly as malformed as they were
+ * stored.
+ */
+function validateResult(method: MethodName, result: unknown): unknown {
   const def = MethodsSchema[method];
-  def.result.parse(result);
+  return def.result.parse(result);
 }
 
 export async function dispatch(backend: Backend, request: RpcRequest): Promise<RpcResponse> {
@@ -153,8 +163,7 @@ export async function dispatch(backend: Backend, request: RpcRequest): Promise<R
       }
     }
 
-    validateResult(request.method as MethodName, result);
-    return { result };
+    return { result: validateResult(request.method as MethodName, result) };
   } catch (error) {
     if (error instanceof RpcError) {
       return { error: { code: error.code, message: error.message } };

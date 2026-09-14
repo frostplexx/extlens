@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, it, test } from "vitest";
 import { ErrorCodes } from "@extlens/protocol";
 import { dispatch, RpcError } from "../src/rpc.js";
 import { makeStubBackend } from "./stub-backend.js";
@@ -324,5 +324,47 @@ describe("host.status / host.start / host.stop", () => {
     delete backend.host;
     const res = await call(backend, "host.log");
     expect(res).toEqual({ error: { code: ErrorCodes.METHOD_NOT_FOUND, message: expect.stringContaining("not supported") } });
+  });
+});
+
+describe("results carry schema defaults", () => {
+  /** A report as an older version stored it: no surfaces, verdict or score. */
+  const legacyReport = {
+    id: "r1",
+    extensionId: "mv2-a",
+    tested: true,
+    verificationDurationSecs: null,
+    installs: true,
+    worksInMv2: true,
+    needsLogin: false,
+    isPopupWorking: null,
+    isSettingsWorking: null,
+    isNewTabWorking: null,
+    isInteresting: false,
+    overallWorking: "yes",
+    notes: "",
+    listeners: [],
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  };
+
+  it("fills in fields a stored report predates, rather than passing it through raw", async () => {
+    // The client trusts the schema and calls .map on surfaces; without this it gets undefined.
+    const backend = { ...makeStubBackend(), getReport: async () => legacyReport as never } as Backend;
+    const response = await dispatch(backend, { method: "reports.get", params: { extensionId: "mv2-a" } } as never);
+    const report = (response as { result: { report: Record<string, unknown> } }).result.report;
+    expect(report.surfaces).toEqual([]);
+    expect(report.verdict).toBeNull();
+    expect(report.score).toBeNull();
+  });
+
+  it("does the same for a bulk export, where one bad row would lose the corpus", async () => {
+    const backend = {
+      ...makeStubBackend(),
+      listReports: async () => [{ name: "An Ext", report: legacyReport }] as never,
+    } as Backend;
+    const response = await dispatch(backend, { method: "reports.list", params: {} } as never);
+    const rows = (response as { result: { reports: { report: Record<string, unknown> }[] } }).result.reports;
+    expect(rows[0].report.surfaces).toEqual([]);
   });
 });
