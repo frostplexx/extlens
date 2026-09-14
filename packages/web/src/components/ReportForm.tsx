@@ -81,12 +81,18 @@ export function ReportForm({
     onSubmit,
     submitting,
     error,
+    submitLabel,
+    footer,
 }: {
     profile: ExtensionProfile;
     saved: Report | null;
     onSubmit: (draft: ReportDraft) => void;
     submitting: boolean;
     error: string | null;
+    /** Wording for the primary action; defaults to save/update. */
+    submitLabel?: string;
+    /** Extra controls beside it — the review pass puts Skip here. */
+    footer?: React.ReactNode;
 }) {
     const flags = useMemo(() => flagsOf(profile), [profile]);
     const [startedAt, setStartedAt] = useState(() => Date.now());
@@ -249,8 +255,9 @@ export function ReportForm({
             <Field orientation="horizontal">
                 <Button onClick={submit} disabled={submitting}>
                     {submitting ? <Spinner /> : <Save className="size-4" />}
-                    {saved ? "Update report" : "Save report"}
+                    {submitLabel ?? (saved ? "Update report" : "Save report")}
                 </Button>
+                {footer}
                 <FieldDescription>{Math.round((Date.now() - startedAt) / 1000)}s on this extension</FieldDescription>
             </Field>
         </FieldGroup>

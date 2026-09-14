@@ -142,7 +142,24 @@ For UI development, `npm run web:dev` runs vite on :5173 with HMR; keep
 `npm run start --workspace packages/web` running alongside it for the bridge,
 and open the :5173 page with the same `?token=` query.
 
-Keyboard: `/` search, `j`/`k` select, `b`/`x` launch/close browsers, `l` log.
+### Review mode
+
+Browse mode is a table; review mode is the loop you actually run a corpus
+through — one extension at a time, with the queue keeping your place:
+
+- pick a queue: not yet reviewed (default), migrated-but-unreviewed, or
+  everything, in the current sort order
+- the MV2/MV3 browsers launch automatically for each extension (toggleable), so
+  the step between two verifications is one keystroke
+- **Save & next** files the report and advances; **Skip** advances without one
+- the queue is a snapshot taken when the pass starts, so an extension you file
+  keeps its place instead of vanishing from under the cursor
+- pages are fetched ahead of the cursor, so a pass runs past page boundaries
+  without you noticing there were any
+
+Keyboard: `/` search, `b`/`x` launch/close browsers, `l` log. In browse mode
+`j`/`k` move the selection; in review mode `]`/`[` (or `j`/`k`) move through the
+queue.
 
 ## SSH mode
 

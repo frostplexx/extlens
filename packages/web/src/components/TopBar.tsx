@@ -7,7 +7,7 @@
  */
 import * as React from "react";
 import type { HostStatus } from "@extlens/protocol";
-import { Play, Square, Terminal } from "lucide-react";
+import { ClipboardCheck, Play, Square, Table2, Terminal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -21,11 +21,15 @@ export function TopBar({
     session,
     host,
     onToggleHost,
+    mode,
+    onModeChange,
 }: {
     status: BridgeStatus;
     session: SessionState | null;
     host: { status: HostStatus | null; supported: boolean; running: boolean };
     onToggleHost: () => void;
+    mode: "browse" | "review";
+    onModeChange: (mode: "browse" | "review") => void;
 }) {
     const link =
         status !== "open"
@@ -43,6 +47,31 @@ export function TopBar({
             <div className="flex items-center gap-2">
                 <Terminal className="size-4 text-primary" />
                 <span className="font-semibold tracking-tight">extlens</span>
+            </div>
+
+            <Separator orientation="vertical" className="h-6" />
+
+            {/* Browse and review are different jobs over the same corpus, not two views of one
+                screen, so the switch between them is the first control in the bar. */}
+            <div className="flex items-center gap-1 rounded-md bg-secondary/60 p-0.5">
+                <Button
+                    size="sm"
+                    variant={mode === "browse" ? "secondary" : "ghost"}
+                    className={mode === "browse" ? "bg-background shadow-sm" : ""}
+                    onClick={() => onModeChange("browse")}
+                >
+                    <Table2 className="size-4" />
+                    Browse
+                </Button>
+                <Button
+                    size="sm"
+                    variant={mode === "review" ? "secondary" : "ghost"}
+                    className={mode === "review" ? "bg-background shadow-sm" : ""}
+                    onClick={() => onModeChange("review")}
+                >
+                    <ClipboardCheck className="size-4" />
+                    Review
+                </Button>
             </div>
 
             <Separator orientation="vertical" className="h-6" />

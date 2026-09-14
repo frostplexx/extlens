@@ -20,9 +20,11 @@ import { useBridge } from "./hooks/useBridge";
 import { useExtensions } from "./hooks/useExtensions";
 import { useHostJob } from "./hooks/useHostJob";
 import { useProfile } from "./hooks/useProfile";
+import { useReviewQueue } from "./hooks/useReviewQueue";
 import { DetailPane } from "./components/DetailPane";
 import { ExtensionTable } from "./components/ExtensionTable";
 import { LogDock } from "./components/LogDock";
+import { ReviewView } from "./components/ReviewView";
 import { Toolbar } from "./components/Toolbar";
 import { TopBar } from "./components/TopBar";
 
@@ -30,8 +32,14 @@ export function App() {
     const bridge = useBridge();
     const connected = bridge.status === "open" && bridge.session?.connection === "connected";
 
+    const [mode, setMode] = useState<"browse" | "review">("browse");
+    const [autoLaunch, setAutoLaunch] = useState(true);
+
     const list = useExtensions(bridge, connected);
-    const profile = useProfile(bridge, list.selectedId, connected);
+    const queue = useReviewQueue(bridge, connected, list.sort, mode === "review");
+    // One profile hook serves both modes; which extension it loads is whichever mode is driving.
+    const subjectId = mode === "review" ? (queue.current?.id ?? null) : list.selectedId;
+    const profile = useProfile(bridge, subjectId, connected);
     const host = useHostJob(bridge, connected, list.refresh);
 
     const [logOpen, setLogOpen] = useState(false);
@@ -74,16 +82,23 @@ export function App() {
                 .then(() => {
                     setSubmitting(false);
                     toast.success("Report saved");
-                    // Both need refreshing: the row gains its ✓, the pane gains the saved report.
-                    list.refresh();
-                    profile.reload();
+                    if (mode === "review") {
+                        // Saving is what advances a review pass; making the reviewer then press
+                        // "next" would be a second confirmation of a decision already made.
+                        queue.completeCurrent();
+                        list.refresh();
+                    } else {
+                        // Both need refreshing: the row gains its ✓, the pane gains the report.
+                        list.refresh();
+                        profile.reload();
+                    }
                 })
                 .catch((e: Error) => {
                     setSubmitting(false);
                     setSubmitError(e.message);
                 });
         },
-        [bridge, list, profile],
+        [bridge, mode, queue, list, profile],
     );
 
     // The keyboard review loop, mirroring the terminal client. Suppressed while typing, since j
@@ -106,7 +121,14 @@ export function App() {
                 return;
             }
             if (typing || e.metaKey || e.ctrlKey) return;
-            if (e.key === "j" || e.key === "ArrowDown") {
+            // Review mode moves through the queue; browse mode moves the table selection.
+            if (mode === "review" && (e.key === "]" || e.key === "j")) {
+                e.preventDefault();
+                queue.next();
+            } else if (mode === "review" && (e.key === "[" || e.key === "k")) {
+                e.preventDefault();
+                queue.previous();
+            } else if (e.key === "j" || e.key === "ArrowDown") {
                 e.preventDefault();
                 list.moveSelection(1);
             } else if (e.key === "k" || e.key === "ArrowUp") {
@@ -122,7 +144,7 @@ export function App() {
         };
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
-    }, [run, list, profile.files]);
+    }, [run, mode, queue, list, profile.files]);
 
     const empty = list.rows.length === 0 && !list.loading;
 
@@ -134,8 +156,30 @@ export function App() {
                     session={bridge.session}
                     host={{ status: host.status, supported: host.supported, running: host.running }}
                     onToggleHost={host.toggle}
+                    mode={mode}
+                    onModeChange={setMode}
                 />
 
+                {mode === "review" ? (
+                    <ReviewView
+                        queue={queue}
+                        profile={profile.profile}
+                        files={profile.files}
+                        report={profile.report}
+                        profileLoading={profile.loading}
+                        profileError={profile.error}
+                        local={bridge.local}
+                        autoLaunch={autoLaunch}
+                        onAutoLaunchChange={setAutoLaunch}
+                        onLaunch={() => run("local.launch", { files: profile.files, id: subjectId })}
+                        onCloseBrowsers={() => run("local.close")}
+                        onAnswerPrompt={(accept) => run("local.answerPrompt", { accept })}
+                        onSubmitReport={submitReport}
+                        submitting={submitting}
+                        submitError={submitError}
+                        onExit={() => setMode("browse")}
+                    />
+                ) : (
                 <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
                     <ResizablePanel defaultSize={62} minSize={35}>
                         <div className="flex h-full min-w-0 flex-col">
@@ -220,7 +264,7 @@ export function App() {
                                 loading={profile.loading}
                                 error={profile.error}
                                 local={bridge.local}
-                                onLaunch={() => run("local.launch", { files: profile.files, id: list.selectedId })}
+                                onLaunch={() => run("local.launch", { files: profile.files, id: subjectId })}
                                 onCloseBrowsers={() => run("local.close")}
                                 onAnswerPrompt={(accept) => run("local.answerPrompt", { accept })}
                                 onSubmitReport={submitReport}
@@ -230,6 +274,7 @@ export function App() {
                         </aside>
                     </ResizablePanel>
                 </ResizablePanelGroup>
+                )}
 
                 <LogDock
                     open={logOpen}
