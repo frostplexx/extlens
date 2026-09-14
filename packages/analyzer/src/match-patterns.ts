@@ -66,7 +66,9 @@ export function probeUrls(matches: string[]): ProbeUrl[] {
 
         const url = probeUrlFor(pattern);
         if (!url) {
-            out.push({ pattern, url });
+            // `http://*/*`, `https://*/*` and `file://*/*` are three ways of saying "everywhere",
+            // and listing them separately reads as three different things to check.
+            if (!out.some((p) => p.url === null)) out.push({ pattern, url });
             continue;
         }
 

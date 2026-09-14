@@ -76,9 +76,6 @@ export function detectSurfaces(manifest: Manifest, files: SourceFile[]): Detecte
     const action = asRecord(manifest.action ?? manifest.browser_action ?? manifest.page_action);
     const popup = stringOrNull(action.default_popup);
     if (popup) add("popup", `${actionKey}.default_popup: ${popup}`);
-    // Declaring an action puts a button in the toolbar whether or not it opens a popup. Without
-    // this, an extension whose whole UI is a toolbar button reported no surfaces at all.
-    if (actionKey) add("toolbar_action", `${actionKey} declared`);
 
     const optionsUi = asRecord(manifest.options_ui);
     const optionsPage = stringOrNull(manifest.options_page) ?? stringOrNull(optionsUi.page);
@@ -123,6 +120,21 @@ export function detectSurfaces(manifest: Manifest, files: SourceFile[]): Detecte
         for (const { surface, pattern, evidence } of API_PATTERNS) {
             if (!found.has(surface) && pattern.test(file.content)) add(surface, `${file.path}: ${evidence}`);
         }
+    }
+
+    /*
+     * A toolbar button and a popup are the same click.
+     *
+     * Chrome fires action.onClicked only when no popup is set, so the two are mutually exclusive:
+     * with a popup, clicking the icon opens it and there is exactly one thing to judge. Reporting
+     * both asked the reviewer the same question twice and made one extension look like it had two
+     * surfaces, which quietly inflates any per-surface count taken over the corpus.
+     */
+    if (found.has("popup")) {
+        found.delete("toolbar_action");
+    } else if (actionKey) {
+        // No popup: the click goes to a handler, and that IS the surface.
+        add("toolbar_action", `${actionKey} declared, no popup`);
     }
 
     return UI_SURFACES.filter((surface) => found.has(surface)).map((surface) => ({

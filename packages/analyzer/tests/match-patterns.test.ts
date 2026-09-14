@@ -60,4 +60,18 @@ describe("a content script's pattern set", () => {
     it("keeps an unresolvable pattern, because running everywhere is itself worth checking", () => {
         expect(probeUrls(["<all_urls>"])).toEqual([{ pattern: "<all_urls>", url: null }]);
     });
+
+    it("states 'everywhere' once, however many ways the manifest says it", () => {
+        // http://*/*, https://*/* and file://*/* are one thing to check, not three.
+        expect(probeUrls(["http://*/*", "https://*/*", "file://*/*"])).toEqual([
+            { pattern: "http://*/*", url: null },
+        ]);
+    });
+
+    it("still lists a concrete site alongside an everywhere pattern", () => {
+        expect(probeUrls(["<all_urls>", "https://*.github.com/*"]).map((p) => p.url)).toEqual([
+            null,
+            "https://github.com/",
+        ]);
+    });
 });

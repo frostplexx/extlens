@@ -20,14 +20,11 @@ describe("manifest-declared surfaces", () => {
                 options_page: "options.html",
                 chrome_url_overrides: { newtab: "newtab.html" },
             } as Manifest),
-        ).toEqual(["popup", "toolbar_action", "options_page", "new_tab"]);
+        ).toEqual(["popup", "options_page", "new_tab"]);
     });
 
-    it("reads an MV2 browser_action popup as a popup and its toolbar button", () => {
-        expect(surfaces({ browser_action: { default_popup: "popup.html" } } as Manifest)).toEqual([
-            "popup",
-            "toolbar_action",
-        ]);
+    it("reads an MV2 browser_action popup as a popup", () => {
+        expect(surfaces({ browser_action: { default_popup: "popup.html" } } as Manifest)).toEqual(["popup"]);
     });
 
     it("reads options_ui.page as an options page", () => {
@@ -107,11 +104,16 @@ describe("toolbar actions and runtime popups", () => {
         expect(surfaces({ browser_action: { default_title: "Go" } } as Manifest)).toEqual(["toolbar_action"]);
     });
 
-    it("reports both when the action has a popup", () => {
-        expect(surfaces({ action: { default_popup: "popup.html" } } as Manifest)).toEqual([
-            "popup",
-            "toolbar_action",
+    it("does not also report a toolbar button when the action has a popup", () => {
+        // Chrome fires onClicked only when no popup is set: one click, one thing to judge.
+        expect(surfaces({ action: { default_popup: "popup.html" } } as Manifest)).toEqual(["popup"]);
+    });
+
+    it("drops the toolbar button even when onClicked appears in the source alongside a popup", () => {
+        const found = surfaces({ action: { default_popup: "popup.html" } } as Manifest, [
+            js("bg.js", "chrome.action.onClicked.addListener(() => {})"),
         ]);
+        expect(found).toEqual(["popup"]);
     });
 
     it("finds a popup attached at runtime with setPopup", () => {

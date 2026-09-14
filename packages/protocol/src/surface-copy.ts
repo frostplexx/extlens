@@ -23,7 +23,7 @@ export const SURFACE_LABELS: Record<UiSurface, string> = {
     keyboard_shortcuts: "Keyboard shortcuts",
     omnibox: "Omnibox keyword",
     page_interaction: "Page interaction",
-    background: "Background behaviour",
+    background: "Survives idle",
 };
 
 export const SURFACE_HINTS: Record<UiSurface, string> = {
@@ -42,6 +42,10 @@ export const SURFACE_HINTS: Record<UiSurface, string> = {
     omnibox: "Type the keyword in the address bar, press Tab, then a query. Suggestions should appear.",
     page_interaction:
         "Visit a page the content script matches. Its injected UI or behaviour — buttons, highlights, replacements, blocking — should still happen.",
+    // Was "exercise a feature that needs the background", which is not a question a reviewer can
+    // answer: the background is not a thing you can look at. The MV3-specific failure is concrete
+    // and reproducible, so ask for that instead — and it reuses a surface already judged above
+    // rather than requiring anything new to be found.
     background:
-        "Exercise a feature that needs the background. Then leave it idle ~30s and try again: MV3 evicts the worker, and state must survive that.",
+        "Use a surface above, wait ~30s without touching that browser, then use it again. MV3 stops the service worker when idle, and anything it kept only in memory is gone.",
 };
