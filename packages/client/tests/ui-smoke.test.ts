@@ -118,7 +118,13 @@ const subject: AnalyzerSubject = {
       chromeUrlOverrides: { newtab: null },
     },
     listeners: [
-      { api: "chrome.runtime.onMessage", file: "bg.js", line: 12, snippet: "chrome.runtime.onMessage.addListener" },
+      {
+        api: "chrome.runtime.onMessage",
+        file: "bg.js",
+        line: 12,
+        snippet: "chrome.runtime.onMessage.addListener",
+        kind: "listener" as const,
+      },
     ],
     surfaces: [
       { surface: "popup", evidence: "action.default_popup: popup.html" },
