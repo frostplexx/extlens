@@ -1,32 +1,35 @@
 /**
  * App-level pieces built on the shadcn primitives in components/ui.
  *
- * The rule: anything generic enough to be in a component library stays in ui/ untouched, so it can
- * be regenerated; anything that encodes something about *extensions* — what a score means, what a
- * browser phase looks like — lives here.
+ * The rule: anything generic enough to belong in a component library stays in ui/ untouched so it
+ * can be regenerated; anything that encodes something about *extensions* — what a score means,
+ * what a browser phase looks like — lives here.
  */
 import * as React from "react";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 
 /** Score → colour. The same thresholds as the terminal client, so the two agree at a glance. */
-export function scoreTone(score: number): { text: string; bar: string } {
-    if (score >= 70) return { text: "text-green", bar: "bg-green" };
-    if (score >= 40) return { text: "text-yellow", bar: "bg-yellow" };
-    return { text: "text-red", bar: "bg-red" };
+export function scoreTone(score: number): { text: string; indicator: string } {
+    if (score >= 70) return { text: "text-green", indicator: "[&_[data-slot=progress-indicator]]:bg-green" };
+    if (score >= 40) return { text: "text-yellow", indicator: "[&_[data-slot=progress-indicator]]:bg-yellow" };
+    return { text: "text-red", indicator: "[&_[data-slot=progress-indicator]]:bg-red" };
 }
 
+/**
+ * A score as a number plus a bar.
+ *
+ * The bar is `Progress` recoloured through its data-slot rather than a hand-rolled div, so the
+ * component stays stock and still carries its ARIA role — the number alone is the accessible
+ * value, but the bar is what makes a column of scores scannable.
+ */
 export function ScoreBar({ score, className }: { score: number; className?: string }) {
     const tone = scoreTone(score);
     return (
         <div className={cn("flex items-center gap-2", className)}>
             <span className={cn("w-7 text-right text-sm font-semibold tabular-nums", tone.text)}>{score}</span>
-            <div className="h-1.5 w-full max-w-20 overflow-hidden rounded-full bg-secondary">
-                <div
-                    className={cn("h-full rounded-full transition-all", tone.bar)}
-                    style={{ width: `${Math.max(0, Math.min(100, score))}%` }}
-                />
-            </div>
+            <Progress value={score} className={cn("w-full max-w-20", tone.indicator)} />
         </div>
     );
 }
@@ -64,21 +67,7 @@ export function PhaseBadge({ phase }: { phase: string }) {
     );
 }
 
-/** Key/value row for the manifest and profile panes. */
-export function Field({ label, children }: { label: string; children: React.ReactNode }) {
-    return (
-        <div className="grid grid-cols-[9rem_1fr] gap-3 py-1 text-sm">
-            <dt className="text-muted-foreground">{label}</dt>
-            <dd className="min-w-0 break-words">{children}</dd>
-        </div>
-    );
-}
-
-export function EmptyState({ title, hint }: { title: string; hint?: string }) {
-    return (
-        <div className="flex h-full flex-col items-center justify-center gap-1 p-10 text-center">
-            <p className="text-sm text-muted-foreground">{title}</p>
-            {hint ? <p className="text-xs text-muted-foreground/70">{hint}</p> : null}
-        </div>
-    );
+/** SHOUTING_SNAKE_CASE is the analyzer's internal identifier, not a label for a reader. */
+export function prettyTag(tag: string): string {
+    return tag.toLowerCase().replace(/_/g, " ");
 }

@@ -218,6 +218,10 @@ packages/web/src/components/*  — table, detail pane, report form, log dock (pr
 packages/web/src/components/ui — shadcn/ui components, generated; do not hand-edit
 ```
 
+The table is TanStack Table over shadcn's `table` primitives, in manual sorting
+and pagination mode: the host owns the corpus, so the table only owns the column
+model and presentation.
+
 The same rule as the TUI: hooks own behaviour, `App.tsx` is wiring.
 
 Components come from shadcn/ui (`npx shadcn@latest add <name>`) and are left
@@ -228,6 +232,10 @@ supported way — `src/index.css` maps shadcn's semantic tokens (`--background`,
 without any component being forked. Anything that encodes something about
 *extensions* rather than about widgets (what a score colour means, what a
 browser phase looks like) lives in `components/shared.tsx`.
+
+Where a shadcn component needs a project colour — score bars, breakdown bars —
+it is recoloured through its `data-slot` from the outside (`[&_[data-slot=
+progress-indicator]]:bg-green`) rather than by forking the component.
 
 ## Docs
 

@@ -9,19 +9,21 @@ import * as React from "react";
 import { useEffect, useRef } from "react";
 import type { HostStatus, LogLine } from "@extlens/protocol";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Kbd } from "@/components/ui/kbd";
 import { cn } from "@/lib/utils";
 
 export function LogDock({
     open,
-    onToggle,
+    onOpenChange,
     status,
     lines,
     error,
 }: {
     open: boolean;
-    onToggle: () => void;
+    onOpenChange: (open: boolean) => void;
     status: HostStatus | null;
     lines: LogLine[];
     error: string | null;
@@ -35,17 +37,22 @@ export function LogDock({
     }, [lines.length, open]);
 
     return (
-        <div className="shrink-0 border-t bg-card">
+        <Collapsible open={open} onOpenChange={onOpenChange} className="shrink-0 border-t bg-card">
             <div className="flex h-10 items-center gap-3 px-3">
-                <Button size="sm" variant="ghost" onClick={onToggle}>
-                    {open ? <ChevronDown className="size-4" /> : <ChevronUp className="size-4" />}
-                    Host log
-                </Button>
+                <CollapsibleTrigger asChild>
+                    <Button size="sm" variant="ghost">
+                        {open ? <ChevronDown className="size-4" /> : <ChevronUp className="size-4" />}
+                        Host log
+                    </Button>
+                </CollapsibleTrigger>
                 {status?.phase ? <Badge variant="outline">{status.phase}</Badge> : null}
                 {error ? <span className="text-sm text-destructive">{error}</span> : null}
-                <span className="ml-auto text-xs text-muted-foreground tabular-nums">{lines.length} lines</span>
+                <div className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
+                    <span className="tabular-nums">{lines.length} lines</span>
+                    <Kbd>l</Kbd>
+                </div>
             </div>
-            {open ? (
+            <CollapsibleContent>
                 <div
                     ref={scroller}
                     onScroll={(e) => {
@@ -70,7 +77,7 @@ export function LogDock({
                         ))
                     )}
                 </div>
-            ) : null}
-        </div>
+            </CollapsibleContent>
+        </Collapsible>
     );
 }

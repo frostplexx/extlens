@@ -1,15 +1,20 @@
 /**
  * Composition root: hooks own behaviour, this owns wiring — the same split as the terminal client.
  *
- * The frame is fixed to the viewport (bar, toolbar, split body, log dock) so the page itself never
- * scrolls; the table and the detail pane scroll independently. Comparing a row against its profile
- * is the core motion of a review pass, and having either move under the reader breaks it.
+ * The frame is fixed to the viewport (bar, toolbar, resizable body, log dock) so the page itself
+ * never scrolls; the table and the detail pane scroll independently. Comparing a row against its
+ * profile is the core motion of a review pass, and having either move under the reader breaks it.
  */
 import * as React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReportDraft } from "@extlens/protocol";
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, PackageOpen, SearchX } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { Kbd } from "@/components/ui/kbd";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useBridge } from "./hooks/useBridge";
 import { useExtensions } from "./hooks/useExtensions";
@@ -20,7 +25,6 @@ import { ExtensionTable } from "./components/ExtensionTable";
 import { LogDock } from "./components/LogDock";
 import { Toolbar } from "./components/Toolbar";
 import { TopBar } from "./components/TopBar";
-import { EmptyState } from "./components/shared";
 
 export function App() {
     const bridge = useBridge();
@@ -33,7 +37,6 @@ export function App() {
     const [logOpen, setLogOpen] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState<string | null>(null);
-    const [actionError, setActionError] = useState<string | null>(null);
     const searchRef = useRef<HTMLInputElement>(null);
 
     /**
@@ -43,8 +46,7 @@ export function App() {
      */
     const run = useCallback(
         (method: string, params: Record<string, unknown> = {}) => {
-            setActionError(null);
-            bridge.call(method, params).catch((e: Error) => setActionError(e.message));
+            bridge.call(method, params).catch((e: Error) => toast.error(e.message));
         },
         [bridge],
     );
@@ -57,6 +59,12 @@ export function App() {
         wasRunning.current = host.running;
     }, [host.running]);
 
+    // List failures are transport-level and transient; a toast says so without the table having to
+    // give up the rows it already has.
+    useEffect(() => {
+        if (list.error) toast.error(list.error);
+    }, [list.error]);
+
     const submitReport = useCallback(
         (draft: ReportDraft) => {
             setSubmitting(true);
@@ -65,6 +73,7 @@ export function App() {
                 .call<{ id: string }>("reports.submit", { report: draft })
                 .then(() => {
                     setSubmitting(false);
+                    toast.success("Report saved");
                     // Both need refreshing: the row gains its ✓, the pane gains the saved report.
                     list.refresh();
                     profile.reload();
@@ -77,8 +86,8 @@ export function App() {
         [bridge, list, profile],
     );
 
-    // The keyboard review loop, mirroring the terminal client. Suppressed while typing, since
-    // j and k are also letters.
+    // The keyboard review loop, mirroring the terminal client. Suppressed while typing, since j
+    // and k are also letters.
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
             const target = e.target as HTMLElement | null;
@@ -115,7 +124,7 @@ export function App() {
         return () => window.removeEventListener("keydown", onKey);
     }, [run, list, profile.files]);
 
-    const error = actionError ?? list.error;
+    const empty = list.rows.length === 0 && !list.loading;
 
     return (
         <TooltipProvider delayDuration={300}>
@@ -127,94 +136,110 @@ export function App() {
                     onToggleHost={host.toggle}
                 />
 
-                {error ? (
-                    <div className="flex items-center gap-3 border-b border-destructive/40 bg-destructive/10 px-5 py-2 text-sm text-destructive">
-                        <span className="min-w-0 flex-1 break-words">{error}</span>
-                        <Button size="icon" variant="ghost" className="size-6" onClick={() => setActionError(null)}>
-                            <X className="size-3.5" />
-                        </Button>
-                    </div>
-                ) : null}
-
-                <div className="flex min-h-0 flex-1">
-                    <main className="flex min-w-0 flex-1 flex-col">
-                        <Toolbar
-                            search={list.search}
-                            onSearch={list.setSearch}
-                            sort={list.sort}
-                            onSort={list.setSort}
-                            stats={list.stats}
-                            searchRef={searchRef}
-                        />
-
-                        {list.rows.length === 0 && !list.loading ? (
-                            <EmptyState
-                                title={list.search ? "No extensions match that search" : "No extensions yet"}
-                                hint={list.search ? "Try a shorter query." : "Point the server at a host with a corpus."}
-                            />
-                        ) : (
-                            <ExtensionTable
-                                rows={list.rows}
-                                selectedId={list.selectedId}
+                <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
+                    <ResizablePanel defaultSize={62} minSize={35}>
+                        <div className="flex h-full min-w-0 flex-col">
+                            <Toolbar
+                                search={list.search}
+                                onSearch={list.setSearch}
                                 sort={list.sort}
                                 onSort={list.setSort}
-                                onSelect={list.select}
-                                loading={list.loading}
+                                stats={list.stats}
+                                searchRef={searchRef}
                             />
-                        )}
 
-                        <div className="flex h-12 shrink-0 items-center justify-between border-t px-5 text-sm text-muted-foreground">
-                            <span>
-                                {list.rows.length} shown · page {list.page} of {list.totalPages}
-                            </span>
-                            <div className="flex gap-2">
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => list.setPage(Math.max(1, list.page - 1))}
-                                    disabled={list.page <= 1}
-                                >
-                                    <ChevronLeft className="size-4" />
-                                    Previous
-                                </Button>
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => list.setPage(Math.min(list.totalPages, list.page + 1))}
-                                    disabled={list.page >= list.totalPages}
-                                >
-                                    Next
-                                    <ChevronRight className="size-4" />
-                                </Button>
+                            {empty ? (
+                                <Empty className="flex-1">
+                                    <EmptyHeader>
+                                        <EmptyMedia variant="icon">
+                                            {list.search ? <SearchX /> : <PackageOpen />}
+                                        </EmptyMedia>
+                                        <EmptyTitle>
+                                            {list.search ? "No extensions match that search" : "No extensions yet"}
+                                        </EmptyTitle>
+                                        <EmptyDescription>
+                                            {list.search ? (
+                                                <>
+                                                    Try a shorter query, or clear the box with <Kbd>Esc</Kbd>.
+                                                </>
+                                            ) : (
+                                                "Point the server at a host that serves a corpus."
+                                            )}
+                                        </EmptyDescription>
+                                    </EmptyHeader>
+                                </Empty>
+                            ) : (
+                                <ExtensionTable
+                                    rows={list.rows}
+                                    selectedId={list.selectedId}
+                                    sort={list.sort}
+                                    onSort={list.setSort}
+                                    onSelect={list.select}
+                                    loading={list.loading}
+                                />
+                            )}
+
+                            <div className="flex h-12 shrink-0 items-center justify-between border-t px-5 text-sm text-muted-foreground">
+                                <span>
+                                    {list.rows.length} shown · page {list.page} of {list.totalPages}
+                                </span>
+                                <div className="flex gap-2">
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => list.setPage(Math.max(1, list.page - 1))}
+                                        disabled={list.page <= 1}
+                                    >
+                                        <ChevronLeft className="size-4" />
+                                        Previous
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => list.setPage(Math.min(list.totalPages, list.page + 1))}
+                                        disabled={list.page >= list.totalPages}
+                                    >
+                                        Next
+                                        <ChevronRight className="size-4" />
+                                    </Button>
+                                </div>
                             </div>
                         </div>
-                    </main>
+                    </ResizablePanel>
 
-                    <aside className="flex w-[34rem] shrink-0 flex-col border-l bg-card/40">
-                        <DetailPane
-                            profile={profile.profile}
-                            files={profile.files}
-                            report={profile.report}
-                            loading={profile.loading}
-                            error={profile.error}
-                            local={bridge.local}
-                            onLaunch={() => run("local.launch", { files: profile.files, id: list.selectedId })}
-                            onCloseBrowsers={() => run("local.close")}
-                            onAnswerPrompt={(accept) => run("local.answerPrompt", { accept })}
-                            onSubmitReport={submitReport}
-                            submitting={submitting}
-                            submitError={submitError}
-                        />
-                    </aside>
-                </div>
+                    <ResizableHandle withHandle />
+
+                    {/* Resizable rather than fixed: how much room the profile deserves depends on
+                        the extension — a 40-permission manifest and a two-line one are both normal. */}
+                    <ResizablePanel defaultSize={38} minSize={25}>
+                        <aside className="h-full bg-card/40">
+                            <DetailPane
+                                profile={profile.profile}
+                                files={profile.files}
+                                report={profile.report}
+                                loading={profile.loading}
+                                error={profile.error}
+                                local={bridge.local}
+                                onLaunch={() => run("local.launch", { files: profile.files, id: list.selectedId })}
+                                onCloseBrowsers={() => run("local.close")}
+                                onAnswerPrompt={(accept) => run("local.answerPrompt", { accept })}
+                                onSubmitReport={submitReport}
+                                submitting={submitting}
+                                submitError={submitError}
+                            />
+                        </aside>
+                    </ResizablePanel>
+                </ResizablePanelGroup>
 
                 <LogDock
                     open={logOpen}
-                    onToggle={() => setLogOpen((v) => !v)}
+                    onOpenChange={setLogOpen}
                     status={host.status}
                     lines={host.logs}
                     error={host.error}
                 />
+
+                <Toaster theme="dark" position="bottom-right" />
             </div>
         </TooltipProvider>
     );

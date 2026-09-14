@@ -1,19 +1,30 @@
 /**
  * The manual verification report.
  *
- * The rules are ExtPorter's, identical to the terminal client's: the visible rows follow the
- * manifest (never ask whether an options page works when there is none — "no" and "not
- * applicable" must stay distinguishable in the data), and `overallWorking` is derived downward
- * from the quick assessments rather than left to the reviewer.
+ * The rules are ExtPorter's, identical to the terminal client's: visible rows follow the manifest
+ * (never ask whether an options page works when there is none — "no" and "not applicable" must stay
+ * distinguishable in the data), and `overallWorking` is derived downward from the quick
+ * assessments rather than left to the reviewer.
  */
 import * as React from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { ExtensionProfile, OverallWorking, Report, ReportDraft } from "@extlens/protocol";
-import { Loader2, Save } from "lucide-react";
+import { Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
+import {
+    Field,
+    FieldContent,
+    FieldDescription,
+    FieldError,
+    FieldGroup,
+    FieldLabel,
+    FieldSeparator,
+    FieldSet,
+    FieldTitle,
+} from "@/components/ui/field";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { Mono } from "./shared";
 
@@ -54,6 +65,16 @@ function downgrade(d: Draft, flags: Flags): OverallWorking {
     return d.overallWorking;
 }
 
+/** Why the overall verdict is not the reviewer's to raise, spelled out under the control. */
+function downgradeReason(d: Draft, flags: Flags): string | null {
+    if (!d.installs) return "Forced to “broken”: the extension does not install.";
+    if (d.needsLogin) return "Forced to “could not test”: the extension needs a login.";
+    if (flags.hasPopup && !d.isPopupWorking) return "Forced to “broken”: the popup does not work.";
+    if (flags.hasSettings && !d.isSettingsWorking) return "Forced to “broken”: the options page does not work.";
+    if (flags.isNewTab && !d.isNewTabWorking) return "Forced to “broken”: the new tab override does not work.";
+    return null;
+}
+
 export function ReportForm({
     profile,
     saved,
@@ -84,6 +105,8 @@ export function ReportForm({
             return { ...next, overallWorking: downgrade(next, flags) };
         });
 
+    const reason = downgradeReason(draft, flags);
+
     const submit = () =>
         onSubmit({
             extensionId: profile.id,
@@ -108,37 +131,57 @@ export function ReportForm({
         });
 
     return (
-        <div className="space-y-5">
-            <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-                <Check id="installs" label="Installs" checked={draft.installs} onChange={(v) => set("installs", v)} />
-                <Check id="mv2" label="Works in MV2" checked={draft.worksInMv2} onChange={(v) => set("worksInMv2", v)} />
-                <Check id="login" label="Needs login" checked={draft.needsLogin} onChange={(v) => set("needsLogin", v)} />
-                <Check id="interesting" label="Interesting" checked={draft.isInteresting} onChange={(v) => set("isInteresting", v)} />
-                {flags.hasPopup ? (
-                    <Check id="popup" label="Popup works" checked={draft.isPopupWorking} onChange={(v) => set("isPopupWorking", v)} />
-                ) : null}
-                {flags.hasSettings ? (
+        <FieldGroup>
+            <FieldSet>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+                    <Check id="installs" label="Installs" checked={draft.installs} onChange={(v) => set("installs", v)} />
+                    <Check id="mv2" label="Works in MV2" checked={draft.worksInMv2} onChange={(v) => set("worksInMv2", v)} />
+                    <Check id="login" label="Needs login" checked={draft.needsLogin} onChange={(v) => set("needsLogin", v)} />
                     <Check
-                        id="options"
-                        label="Options page works"
-                        checked={draft.isSettingsWorking}
-                        onChange={(v) => set("isSettingsWorking", v)}
+                        id="interesting"
+                        label="Interesting"
+                        checked={draft.isInteresting}
+                        onChange={(v) => set("isInteresting", v)}
                     />
-                ) : null}
-                {flags.isNewTab ? (
-                    <Check id="newtab" label="New tab works" checked={draft.isNewTabWorking} onChange={(v) => set("isNewTabWorking", v)} />
-                ) : null}
-            </div>
+                    {flags.hasPopup ? (
+                        <Check
+                            id="popup"
+                            label="Popup works"
+                            checked={draft.isPopupWorking}
+                            onChange={(v) => set("isPopupWorking", v)}
+                        />
+                    ) : null}
+                    {flags.hasSettings ? (
+                        <Check
+                            id="options"
+                            label="Options page works"
+                            checked={draft.isSettingsWorking}
+                            onChange={(v) => set("isSettingsWorking", v)}
+                        />
+                    ) : null}
+                    {flags.isNewTab ? (
+                        <Check
+                            id="newtab"
+                            label="New tab works"
+                            checked={draft.isNewTabWorking}
+                            onChange={(v) => set("isNewTabWorking", v)}
+                        />
+                    ) : null}
+                </div>
+            </FieldSet>
 
-            <div className="flex items-center gap-3">
-                <Label htmlFor="overall" className="w-28 text-muted-foreground">
-                    Overall
-                </Label>
+            <FieldSeparator />
+
+            <Field orientation="responsive">
+                <FieldContent>
+                    <FieldLabel htmlFor="overall">Overall</FieldLabel>
+                    {reason ? <FieldDescription>{reason}</FieldDescription> : null}
+                </FieldContent>
                 <Select
                     value={draft.overallWorking}
                     onValueChange={(value) => setDraft((d) => ({ ...d, overallWorking: value as OverallWorking }))}
                 >
-                    <SelectTrigger id="overall" className="w-56">
+                    <SelectTrigger id="overall" className="w-48">
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -147,11 +190,14 @@ export function ReportForm({
                         <SelectItem value="could_not_test">Could not test</SelectItem>
                     </SelectContent>
                 </Select>
-            </div>
+            </Field>
 
             {profile.listeners.length > 0 ? (
-                <div className="space-y-2">
-                    <Label className="text-muted-foreground">Listeners</Label>
+                <Field>
+                    <FieldLabel>Listeners</FieldLabel>
+                    <FieldDescription>
+                        Each event the analyzer found. Leave one untested rather than guessing.
+                    </FieldDescription>
                     <div className="max-h-64 space-y-1.5 overflow-auto rounded-md border p-2">
                         {profile.listeners.map((l, i) => (
                             <div key={`${l.api}:${l.file}:${l.line}`} className="flex items-center gap-2">
@@ -184,13 +230,11 @@ export function ReportForm({
                             </div>
                         ))}
                     </div>
-                </div>
+                </Field>
             ) : null}
 
-            <div className="space-y-2">
-                <Label htmlFor="notes" className="text-muted-foreground">
-                    Notes
-                </Label>
+            <Field>
+                <FieldLabel htmlFor="notes">Notes</FieldLabel>
                 <Textarea
                     id="notes"
                     rows={3}
@@ -198,20 +242,18 @@ export function ReportForm({
                     onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))}
                     placeholder="What broke, what you clicked, anything the next reader needs."
                 />
-            </div>
+            </Field>
 
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
+            {error ? <FieldError>{error}</FieldError> : null}
 
-            <div className="flex items-center gap-3">
+            <Field orientation="horizontal">
                 <Button onClick={submit} disabled={submitting}>
-                    {submitting ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+                    {submitting ? <Spinner /> : <Save className="size-4" />}
                     {saved ? "Update report" : "Save report"}
                 </Button>
-                <span className="text-xs text-muted-foreground">
-                    {Math.round((Date.now() - startedAt) / 1000)}s on this extension
-                </span>
-            </div>
-        </div>
+                <FieldDescription>{Math.round((Date.now() - startedAt) / 1000)}s on this extension</FieldDescription>
+            </Field>
+        </FieldGroup>
     );
 }
 
@@ -244,11 +286,11 @@ function Check({
     onChange: (value: boolean) => void;
 }) {
     return (
-        <div className="flex items-center gap-2">
+        <Field orientation="horizontal">
             <Checkbox id={id} checked={checked} onCheckedChange={(value) => onChange(value === true)} />
-            <Label htmlFor={id} className="cursor-pointer font-normal">
-                {label}
-            </Label>
-        </div>
+            <FieldLabel htmlFor={id} className="font-normal">
+                <FieldTitle>{label}</FieldTitle>
+            </FieldLabel>
+        </Field>
     );
 }

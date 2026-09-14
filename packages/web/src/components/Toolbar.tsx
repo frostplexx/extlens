@@ -1,8 +1,9 @@
-/** Search, sort and corpus statistics: the controls that act on the table below it. */
+/** Search, sort and corpus statistics: the controls that act on the table below them. */
 import * as React from "react";
 import type { ListStats, SortOrder } from "@extlens/protocol";
 import { Search } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
+import { Kbd } from "@/components/ui/kbd";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { SORTS } from "../hooks/useExtensions";
@@ -25,19 +26,20 @@ export function Toolbar({
 }) {
     return (
         <div className="flex h-16 shrink-0 items-center gap-4 border-b px-5">
-            <div className="relative w-80">
-                <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
+            <InputGroup className="w-80">
+                <InputGroupAddon>
+                    <Search />
+                </InputGroupAddon>
+                <InputGroupInput
                     ref={searchRef}
                     value={search}
                     onChange={(e) => onSearch(e.target.value)}
                     placeholder="Search extensions…"
-                    className="pl-8"
                 />
-                <kbd className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded border bg-muted px-1.5 font-mono text-[10px] text-muted-foreground">
-                    /
-                </kbd>
-            </div>
+                <InputGroupAddon align="inline-end">
+                    <Kbd>/</Kbd>
+                </InputGroupAddon>
+            </InputGroup>
 
             <Select value={sort} onValueChange={(value) => onSort(value as SortOrder)}>
                 <SelectTrigger className="w-44">
