@@ -71,7 +71,9 @@ export function SurfaceTable({
                 const status = result?.status ?? "untested";
                 return (
                     <div key={surface} className="space-y-2 p-3">
-                        <div className="flex items-start justify-between gap-3">
+                        {/* Stacked until the row is wide enough to hold both: at narrow widths the
+                            status buttons used to overlap the surface name. */}
+                        <div className="flex flex-col gap-2 @4xl:flex-row @4xl:items-start @4xl:justify-between @4xl:gap-3">
                             <div className="min-w-0 space-y-0.5">
                                 <Tooltip>
                                     <TooltipTrigger asChild>
@@ -108,7 +110,7 @@ export function SurfaceTable({
                                     </ul>
                                 ) : null}
                             </div>
-                            <div className="flex gap-1">
+                            <div className="flex flex-wrap gap-1 @4xl:shrink-0 @4xl:flex-nowrap">
                                 {STATUSES.map(({ value, label, icon: Icon, tone }) => (
                                     <Tooltip key={value}>
                                         <TooltipTrigger asChild>
@@ -127,7 +129,7 @@ export function SurfaceTable({
                                                 <Icon className="size-4 shrink-0" />
                                                 {/* Five near-identical glyphs are a poor target for
                                                     something clicked hundreds of times in a pass. */}
-                                                <span className="hidden @2xl:inline">{label}</span>
+                                                <span>{label}</span>
                                             </button>
                                         </TooltipTrigger>
                                         <TooltipContent>{label}</TooltipContent>

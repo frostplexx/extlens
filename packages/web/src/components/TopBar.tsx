@@ -43,17 +43,17 @@ export function TopBar({
                 };
 
     return (
-        <header className="flex h-14 shrink-0 items-center gap-4 border-b bg-card px-5">
+        <header className="flex h-14 shrink-0 items-center gap-2 border-b bg-card px-3 lg:gap-4 lg:px-5">
             <div className="flex items-center gap-2">
                 <Terminal className="size-4 text-primary" />
-                <span className="font-semibold tracking-tight">extlens</span>
+                <span className="hidden font-semibold tracking-tight lg:inline">extlens</span>
             </div>
 
             <Separator orientation="vertical" className="h-6" />
 
             {/* Browse and review are different jobs over the same corpus, not two views of one
                 screen, so the switch between them is the first control in the bar. */}
-            <div className="flex items-center gap-1 rounded-md bg-secondary/60 p-0.5">
+            <div className="flex shrink-0 items-center gap-1 rounded-md bg-secondary/60 p-0.5">
                 <Button
                     size="sm"
                     variant={mode === "browse" ? "secondary" : "ghost"}
@@ -83,7 +83,7 @@ export function TopBar({
                         {host.running ? "Stop migration" : "Migrate all"}
                     </Button>
                     {host.running && host.status?.extensionId ? (
-                        <span className="text-sm text-peach">
+                        <span className="hidden truncate text-sm text-peach lg:inline">
                             {host.status.extensionId}
                             {host.status.phase ? (
                                 <span className="text-muted-foreground"> · {host.status.phase}</span>
@@ -94,12 +94,16 @@ export function TopBar({
             ) : null}
 
             <div className="ml-auto flex items-center gap-3">
-                {session?.ssh ? <Badge variant="outline">ssh {session.ssh}</Badge> : null}
+                {session?.ssh ? (
+                    <Badge variant="outline" className="hidden max-w-48 truncate lg:inline-flex">
+                        ssh {session.ssh}
+                    </Badge>
+                ) : null}
                 <Tooltip>
                     <TooltipTrigger asChild>
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <span className={cn("size-2 rounded-full", link.dot)} />
-                            {link.label}
+                            <span className={cn("size-2 shrink-0 rounded-full", link.dot)} />
+                            <span className="hidden md:inline">{link.label}</span>
                         </div>
                     </TooltipTrigger>
                     <TooltipContent>{link.hint}</TooltipContent>

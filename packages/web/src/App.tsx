@@ -40,6 +40,14 @@ export function App() {
     // One profile hook serves both modes; which extension it loads is whichever mode is driving.
     const subjectId = mode === "review" ? (queue.current?.id ?? null) : list.selectedId;
     const profile = useProfile(bridge, subjectId, connected);
+    /**
+     * File refs, but only once they belong to the extension on screen.
+     *
+     * Everything that launches a browser goes through this rather than `profile.files`: during the
+     * gap between advancing the queue and the fetch resolving, those are still the previous
+     * extension's paths, and a launch in that window opens the wrong extension.
+     */
+    const readyFiles = profile.loadedId === subjectId ? profile.files : null;
     const host = useHostJob(bridge, connected, list.refresh);
 
     const [logOpen, setLogOpen] = useState(false);
@@ -153,14 +161,14 @@ export function App() {
             } else if (e.key === "l") {
                 setLogOpen((v) => !v);
             } else if (e.key === "b") {
-                run("local.launch", { files: profile.files, id: list.selectedId });
+                run("local.launch", { files: readyFiles, id: subjectId });
             } else if (e.key === "x") {
                 run("local.close");
             }
         };
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
-    }, [run, mode, queue, list, profile.files]);
+    }, [run, mode, queue, list, readyFiles, subjectId]);
 
     const empty = list.rows.length === 0 && !list.loading;
 
@@ -180,14 +188,14 @@ export function App() {
                     <ReviewView
                         queue={queue}
                         profile={profile.profile}
-                        files={profile.files}
+                        files={readyFiles}
                         report={profile.report}
                         profileLoading={profile.loading}
                         profileError={profile.error}
                         local={bridge.local}
                         autoLaunch={autoLaunch}
                         onAutoLaunchChange={setAutoLaunch}
-                        onLaunch={() => run("local.launch", { files: profile.files, id: subjectId })}
+                        onLaunch={() => run("local.launch", { files: readyFiles, id: subjectId })}
                         onCloseBrowsers={() => run("local.close")}
                         onAnswerPrompt={(accept) => run("local.answerPrompt", { accept })}
                         onSubmitReport={submitReport}
@@ -276,12 +284,12 @@ export function App() {
                         <aside className="h-full bg-card/40">
                             <DetailPane
                                 profile={profile.profile}
-                                files={profile.files}
+                                files={readyFiles}
                                 report={profile.report}
                                 loading={profile.loading}
                                 error={profile.error}
                                 local={bridge.local}
-                                onLaunch={() => run("local.launch", { files: profile.files, id: subjectId })}
+                                onLaunch={() => run("local.launch", { files: readyFiles, id: subjectId })}
                                 onCloseBrowsers={() => run("local.close")}
                                 onAnswerPrompt={(accept) => run("local.answerPrompt", { accept })}
                                 onSubmitReport={submitReport}

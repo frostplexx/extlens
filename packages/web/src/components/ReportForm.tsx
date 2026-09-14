@@ -302,10 +302,10 @@ function Toggle({
 }) {
     return (
         <Item variant="outline" size="sm" asChild>
-            <label htmlFor={id} className="cursor-pointer">
+            <label htmlFor={id} className="cursor-pointer" title={hint}>
                 <ItemContent>
                     <ItemTitle>{label}</ItemTitle>
-                    <ItemDescription>{hint}</ItemDescription>
+                    <ItemDescription className="hidden lg:block">{hint}</ItemDescription>
                 </ItemContent>
                 <ItemActions>
                     <Switch id={id} checked={checked} onCheckedChange={onChange} />

@@ -78,17 +78,23 @@ export function ReviewView({
     onOpenUrl?: (url: string) => void;
 }) {
     /**
-     * Auto-launch fires once per extension, keyed on the id whose files have arrived. Without the
-     * key it would re-fire on every unrelated render — and launching Chrome twice is not a
-     * harmless repeat.
+     * Auto-launch fires once per extension, and only once the loaded profile is that extension's.
+     *
+     * Both conditions were learned the hard way. Without the id key it re-fires on unrelated
+     * renders, and launching Chrome twice is not a harmless repeat. Without the profile check it
+     * fires while `files` still points at the PREVIOUS extension — which opened the wrong
+     * extension in both browsers while the pane displayed the right one, and then never corrected
+     * itself, because the id had already been marked as launched.
      */
     const launchedFor = useRef<string | null>(null);
+    const subjectId = queue.current?.id ?? null;
+    const ready = Boolean(subjectId && files && profile && profile.id === subjectId);
     useEffect(() => {
-        if (!autoLaunch || !queue.current || !files) return;
-        if (launchedFor.current === queue.current.id) return;
-        launchedFor.current = queue.current.id;
+        if (!autoLaunch || !ready || !subjectId) return;
+        if (launchedFor.current === subjectId) return;
+        launchedFor.current = subjectId;
         onLaunch();
-    }, [autoLaunch, queue.current?.id, files, onLaunch]);
+    }, [autoLaunch, ready, subjectId, onLaunch]);
 
     return (
         <div className="flex min-h-0 flex-1 flex-col">
@@ -115,9 +121,15 @@ export function ReviewView({
                     </Button>
                 </Empty>
             ) : (
-                <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,22rem)_1fr] overflow-hidden">
+                /*
+                 * The point of this window is to sit beside two browser windows, so it spends most
+                 * of its life narrow. Below `lg` the subject pane stops being a column and becomes
+                 * a collapsible strip above the form: the form is the thing being filled in, and it
+                 * gets the width.
+                 */
+                <div className="flex min-h-0 flex-1 flex-col overflow-auto lg:grid lg:grid-cols-[minmax(0,20rem)_1fr] lg:overflow-hidden">
                     <Subject profile={profile} report={report} />
-                    <div className="flex min-h-0 flex-col overflow-hidden">
+                    <div className="flex min-h-0 flex-col lg:overflow-hidden">
                         <BrowserBar
                             local={local}
                             files={files}
@@ -126,7 +138,7 @@ export function ReviewView({
                             onAnswerPrompt={onAnswerPrompt}
                         />
                         <Separator />
-                        <div className="min-h-0 flex-1 overflow-auto p-5">
+                        <div className="min-h-0 flex-1 p-4 lg:overflow-auto lg:p-5">
                             <ReportForm
                                 profile={profile}
                                 saved={report}
@@ -174,22 +186,28 @@ function QueueBar({
     // to be final — a progress bar that silently re-scales is worse than one that admits it.
     const total = queue.length;
     return (
-        <div className="flex h-16 shrink-0 items-center gap-5 border-b px-5">
+        /*
+         * Wraps rather than overflows. Every control here is used during a pass — the filter and
+         * auto-launch decide what the pass IS — so a narrow window costs a second row, never a
+         * hidden control. Labels go first, the controls themselves never.
+         */
+        <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b px-4 py-2 lg:h-16 lg:flex-nowrap lg:gap-5 lg:px-5 lg:py-0">
             <Button variant="ghost" size="sm" onClick={onExit}>
                 <ArrowLeft className="size-4" />
-                Back to browse
+                <span className="hidden sm:inline">Back to browse</span>
             </Button>
 
-            <Separator orientation="vertical" className="h-8" />
+            <Separator orientation="vertical" className="hidden h-8 lg:block" />
 
-            <div className="flex min-w-56 flex-col gap-1">
-                <div className="flex items-baseline gap-2 text-sm">
+            <div className="flex min-w-40 flex-1 flex-col gap-1 lg:min-w-56 lg:flex-none">
+                <div className="flex items-baseline gap-2 whitespace-nowrap text-sm">
                     <span className="font-medium tabular-nums">
                         {queue.position} / {total}
                         {queue.moreToLoad ? "+" : ""}
                     </span>
-                    <span className="text-muted-foreground">
-                        {done} reviewed this pass
+                    <span className="truncate text-muted-foreground">
+                        {done} reviewed
+                        <span className="hidden xl:inline"> this pass</span>
                         {queue.loading ? " · loading…" : ""}
                     </span>
                 </div>
@@ -197,7 +215,7 @@ function QueueBar({
             </div>
 
             <Select value={queue.filter} onValueChange={(value) => queue.setFilter(value as typeof queue.filter)}>
-                <SelectTrigger className="w-56">
+                <SelectTrigger className="w-44 lg:w-56">
                     <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -212,7 +230,8 @@ function QueueBar({
             <div className="flex items-center gap-2">
                 <Switch id="auto-launch" checked={autoLaunch} onCheckedChange={onAutoLaunchChange} />
                 <Label htmlFor="auto-launch" className="cursor-pointer font-normal">
-                    Launch browsers automatically
+                    <span className="lg:hidden">Auto-launch</span>
+                    <span className="hidden lg:inline">Launch browsers automatically</span>
                 </Label>
             </div>
 
@@ -233,11 +252,26 @@ function QueueBar({
 /** What you need in order to judge this extension — and nothing you do not. */
 function Subject({ profile, report }: { profile: ExtensionProfile; report: Report | null }) {
     return (
-        <aside className="min-h-0 overflow-auto border-r bg-card/40 p-5">
-            <h2 className="text-lg font-semibold leading-tight" title={profile.name}>
-                {profile.name}
-            </h2>
-            <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+        <aside className="shrink-0 border-b bg-card/40 lg:min-h-0 lg:overflow-auto lg:border-b-0 lg:border-r lg:p-5">
+            {/*
+             * Which extension am I judging? The narrow layout scrolls the whole column, so an
+             * unpinned title slides away the moment the reviewer reaches the surfaces — and a form
+             * with no subject on screen is how the wrong extension gets a report. Pinned as one
+             * compact line while narrow; the full header returns once there is a column for it.
+             */}
+            <div className="sticky top-0 z-10 flex items-baseline gap-2 border-b bg-card px-4 py-2 lg:static lg:border-b-0 lg:bg-transparent lg:px-0 lg:py-0">
+                <h2 className="min-w-0 truncate text-lg font-semibold leading-tight" title={profile.name}>
+                    {profile.name}
+                </h2>
+                <span className="shrink-0 text-sm text-muted-foreground lg:hidden">v{profile.version ?? "?"}</span>
+                <Badge variant={profile.manifestVersion === 3 ? "default" : "secondary"} className="shrink-0 lg:hidden">
+                    MV{profile.manifestVersion}
+                </Badge>
+                <ScoreBar score={profile.score} className="ml-auto w-24 shrink-0 lg:hidden" />
+            </div>
+
+            <div className="px-4 pb-4 lg:px-0 lg:pb-0">
+            <div className="mt-1 hidden flex-wrap items-center gap-2 text-sm text-muted-foreground lg:flex">
                 <span>v{profile.version ?? "?"}</span>
                 <Badge variant={profile.manifestVersion === 3 ? "default" : "secondary"}>
                     MV{profile.manifestVersion}
@@ -248,13 +282,16 @@ function Subject({ profile, report }: { profile: ExtensionProfile; report: Repor
                     </Badge>
                 ) : null}
             </div>
-            {/* The store description says what the extension is FOR, which is what tells a
-                reviewer whether the thing they are looking at is the thing that should happen. */}
             {profile.manifest.description ? (
-                <p className="mt-2 text-sm leading-snug text-muted-foreground">{profile.manifest.description}</p>
+                <p className="mt-2 line-clamp-2 text-sm leading-snug text-muted-foreground lg:line-clamp-none">
+                    {profile.manifest.description}
+                </p>
             ) : null}
-            <ScoreBar score={profile.score} className="mt-3 max-w-48" />
+            <ScoreBar score={profile.score} className="mt-3 hidden max-w-48 lg:flex" />
 
+            {/* Tags and manifest facts are reference, not action: worth a column when there is one,
+                and worth folding away when the window is sharing the screen with two browsers. */}
+            <div className="hidden lg:block">
             {profile.tags.length > 0 ? (
                 <div className="mt-4 flex flex-wrap gap-1">
                     {profile.tags.map((tag) => (
@@ -279,7 +316,8 @@ function Subject({ profile, report }: { profile: ExtensionProfile; report: Repor
                     wrap
                 />
             </dl>
-
+            </div>
+            </div>
         </aside>
     );
 }
@@ -313,8 +351,8 @@ function BrowserBar({
     const busy = Object.values(local.browsers).some((b) => b.phase === "launching" || b.phase === "downloading");
 
     return (
-        <div className="shrink-0 space-y-3 p-5">
-            <div className="flex items-center gap-3">
+        <div className="shrink-0 space-y-3 p-4 lg:p-5">
+            <div className="flex flex-wrap items-center gap-2">
                 <Button onClick={onLaunch} disabled={!files || busy}>
                     {busy ? <Spinner /> : <MonitorPlay className="size-4" />}
                     Launch browsers
@@ -323,7 +361,7 @@ function BrowserBar({
                     <SquareX className="size-4" />
                     Close
                 </Button>
-                <span className="text-xs text-muted-foreground">
+                <span className="hidden text-xs text-muted-foreground xl:inline">
                     <Kbd>b</Kbd> launch · <Kbd>x</Kbd> close
                 </span>
             </div>
@@ -332,16 +370,18 @@ function BrowserBar({
                 {(["mv2", "mv3"] as const).map((label) => {
                     const state = local.browsers[label];
                     return (
-                        <Item key={label} variant="outline" size="sm">
-                            <ItemMedia>
+                        // flex-nowrap with a min-w-0 body: Item wraps by default, which at narrow
+                        // widths let the phase badge land on top of the message text.
+                        <Item key={label} variant="outline" size="sm" className="flex-nowrap gap-2">
+                            <ItemMedia className="shrink-0">
                                 <span className="text-xs font-medium uppercase text-muted-foreground">{label}</span>
                             </ItemMedia>
-                            <ItemContent className="min-w-0">
-                                <ItemTitle className="truncate text-xs text-muted-foreground">
+                            <ItemContent className="min-w-0 flex-1">
+                                <ItemTitle className="block truncate text-xs text-muted-foreground">
                                     {state.message ?? (files?.[label] ?? "no files for this variant")}
                                 </ItemTitle>
                             </ItemContent>
-                            <ItemActions>
+                            <ItemActions className="shrink-0">
                                 <PhaseBadge phase={state.phase} />
                             </ItemActions>
                         </Item>
