@@ -16,6 +16,7 @@ import type { Manifest, SourceFile } from "./types.js";
 /** The surfaces a reviewer can be asked about, in the order a review pass would meet them. */
 export const UI_SURFACES = [
     "popup",
+    "toolbar_action",
     "options_page",
     "new_tab",
     "side_panel",
@@ -38,6 +39,11 @@ export interface DetectedSurface {
 }
 
 const API_PATTERNS: { surface: UiSurface; pattern: RegExp; evidence: string }[] = [
+    // A popup does not have to be declared: setPopup() attaches one at runtime, and an extension
+    // that swaps its popup per tab has no default_popup in the manifest at all.
+    { surface: "popup", pattern: /\b(chrome|browser)\.(action|browserAction|pageAction)\.setPopup\s*\(/, evidence: "action.setPopup()" },
+    // A toolbar button with no popup still has a surface: clicking it fires onClicked.
+    { surface: "toolbar_action", pattern: /\b(chrome|browser)\.(action|browserAction|pageAction)\.onClicked\b/, evidence: "action.onClicked" },
     { surface: "context_menu", pattern: /\b(chrome|browser)\.contextMenus\.create\s*\(/, evidence: "contextMenus.create()" },
     { surface: "notifications", pattern: /\b(chrome|browser)\.notifications\.create\s*\(/, evidence: "notifications.create()" },
     { surface: "keyboard_shortcuts", pattern: /\b(chrome|browser)\.commands\.onCommand\b/, evidence: "commands.onCommand" },
@@ -66,9 +72,13 @@ export function detectSurfaces(manifest: Manifest, files: SourceFile[]): Detecte
         if (!found.has(surface)) found.set(surface, evidence);
     };
 
+    const actionKey = manifest.action ? "action" : manifest.browser_action ? "browser_action" : manifest.page_action ? "page_action" : null;
     const action = asRecord(manifest.action ?? manifest.browser_action ?? manifest.page_action);
     const popup = stringOrNull(action.default_popup);
-    if (popup) add("popup", `action.default_popup: ${popup}`);
+    if (popup) add("popup", `${actionKey}.default_popup: ${popup}`);
+    // Declaring an action puts a button in the toolbar whether or not it opens a popup. Without
+    // this, an extension whose whole UI is a toolbar button reported no surfaces at all.
+    if (actionKey) add("toolbar_action", `${actionKey} declared`);
 
     const optionsUi = asRecord(manifest.options_ui);
     const optionsPage = stringOrNull(manifest.options_page) ?? stringOrNull(optionsUi.page);

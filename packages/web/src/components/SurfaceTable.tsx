@@ -12,25 +12,11 @@
  */
 import * as React from "react";
 import type { DetectedSurface, SurfaceResult, SurfaceStatus, UiSurface } from "@extlens/protocol";
+import { SURFACE_HINTS, SURFACE_LABELS } from "@extlens/protocol";
 import { CircleDashed, CircleSlash, CheckCircle2, CircleAlert, XCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-
-/** Reviewer-facing names. The protocol's ids are snake_case and not meant to be read. */
-export const SURFACE_LABELS: Record<UiSurface, string> = {
-    popup: "Popup window",
-    options_page: "Settings page",
-    new_tab: "Custom new tab",
-    side_panel: "Side panel",
-    devtools: "DevTools panel",
-    context_menu: "Context menu",
-    notifications: "Notifications",
-    keyboard_shortcuts: "Keyboard shortcuts",
-    omnibox: "Omnibox keyword",
-    page_interaction: "Page interaction",
-    background: "Background behaviour",
-};
 
 const STATUSES: { value: SurfaceStatus; label: string; icon: React.ElementType; tone: string }[] = [
     { value: "untested", label: "Untested", icon: CircleDashed, tone: "text-muted-foreground" },
@@ -50,7 +36,12 @@ export function SurfaceTable({
     onChange: (surface: UiSurface, patch: Partial<SurfaceResult>) => void;
 }) {
     if (detected.length === 0) {
-        return <p className="text-sm text-muted-foreground">No user-facing surfaces detected in this extension.</p>;
+        return (
+            <p className="text-sm text-muted-foreground">
+                No user-facing surfaces detected. If this extension clearly has UI, the host may be serving
+                profiles from an older build — restart it.
+            </p>
+        );
     }
 
     return (
@@ -65,15 +56,22 @@ export function SurfaceTable({
                 const status = result?.status ?? "untested";
                 return (
                     <div key={surface} className="space-y-2 p-3">
-                        <div className="flex items-center justify-between gap-3">
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <span className="text-sm font-medium">{SURFACE_LABELS[surface]}</span>
-                                </TooltipTrigger>
-                                {/* Why the reviewer is being asked about a surface they may not
-                                    have noticed — a permission and a call, with no visible UI. */}
-                                <TooltipContent>Detected from {evidence}</TooltipContent>
-                            </Tooltip>
+                        <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0 space-y-0.5">
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <span className="text-sm font-medium">{SURFACE_LABELS[surface]}</span>
+                                    </TooltipTrigger>
+                                    {/* Why the reviewer is being asked about a surface they may not
+                                        have noticed — a permission and a call, with no visible UI. */}
+                                    <TooltipContent>Detected from {evidence}</TooltipContent>
+                                </Tooltip>
+                                {/* What to actually do. Two reviewers who interpret a surface
+                                    differently make the column unusable, and "page interaction"
+                                    is not self-explanatory. */}
+                                <p className="text-xs leading-snug text-muted-foreground">{SURFACE_HINTS[surface]}</p>
+                                <p className="text-xs text-muted-foreground/60">{evidence}</p>
+                            </div>
                             <div className="flex gap-1">
                                 {STATUSES.map(({ value, label, icon: Icon, tone }) => (
                                     <Tooltip key={value}>

@@ -5,6 +5,7 @@
 export * from "./messages.js";
 export * from "./types.js";
 export * from "./verdict.js";
+export * from "./surface-copy.js";
 
 /** The protocol version this package implements. Matches PROTOCOL.md v1. */
 export const PROTOCOL_VERSION = "1";

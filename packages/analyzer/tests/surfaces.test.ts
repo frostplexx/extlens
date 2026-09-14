@@ -20,11 +20,14 @@ describe("manifest-declared surfaces", () => {
                 options_page: "options.html",
                 chrome_url_overrides: { newtab: "newtab.html" },
             } as Manifest),
-        ).toEqual(["popup", "options_page", "new_tab"]);
+        ).toEqual(["popup", "toolbar_action", "options_page", "new_tab"]);
     });
 
-    it("reads an MV2 browser_action popup as a popup", () => {
-        expect(surfaces({ browser_action: { default_popup: "popup.html" } } as Manifest)).toEqual(["popup"]);
+    it("reads an MV2 browser_action popup as a popup and its toolbar button", () => {
+        expect(surfaces({ browser_action: { default_popup: "popup.html" } } as Manifest)).toEqual([
+            "popup",
+            "toolbar_action",
+        ]);
     });
 
     it("reads options_ui.page as an options page", () => {
@@ -94,5 +97,39 @@ describe("extensions with no UI", () => {
 
     it("reports nothing for an empty manifest", () => {
         expect(surfaces({} as Manifest)).toEqual([]);
+    });
+});
+
+describe("toolbar actions and runtime popups", () => {
+    it("reports the toolbar button an action declares, popup or not", () => {
+        // An extension whose entire UI is a toolbar button used to report no surfaces at all.
+        expect(surfaces({ action: {} } as Manifest)).toEqual(["toolbar_action"]);
+        expect(surfaces({ browser_action: { default_title: "Go" } } as Manifest)).toEqual(["toolbar_action"]);
+    });
+
+    it("reports both when the action has a popup", () => {
+        expect(surfaces({ action: { default_popup: "popup.html" } } as Manifest)).toEqual([
+            "popup",
+            "toolbar_action",
+        ]);
+    });
+
+    it("finds a popup attached at runtime with setPopup", () => {
+        // An extension that swaps its popup per tab has no default_popup in the manifest at all.
+        expect(surfaces({} as Manifest, [js("bg.js", "chrome.action.setPopup({popup:'a.html'})")])).toContain("popup");
+        expect(surfaces({} as Manifest, [js("bg.js", "chrome.browserAction.setPopup({popup:'a.html'})")])).toContain(
+            "popup",
+        );
+    });
+
+    it("finds a click-only toolbar button from its listener", () => {
+        expect(surfaces({} as Manifest, [js("bg.js", "chrome.action.onClicked.addListener(() => {})")])).toContain(
+            "toolbar_action",
+        );
+    });
+
+    it("keeps the manifest's evidence for a declared popup", () => {
+        const [found] = detectSurfaces({ browser_action: { default_popup: "p.html" } } as Manifest, []);
+        expect(found.evidence).toBe("browser_action.default_popup: p.html");
     });
 });

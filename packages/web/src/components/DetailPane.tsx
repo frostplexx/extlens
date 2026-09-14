@@ -138,6 +138,9 @@ export function DetailPane({
                         ) : null}
                     </div>
                 </div>
+                {profile.manifest.description ? (
+                    <p className="text-sm leading-snug text-muted-foreground">{profile.manifest.description}</p>
+                ) : null}
                 <ScoreBar score={profile.score} className="max-w-56" />
             </header>
 

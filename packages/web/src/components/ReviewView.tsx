@@ -245,6 +245,11 @@ function Subject({ profile, report }: { profile: ExtensionProfile; report: Repor
                     </Badge>
                 ) : null}
             </div>
+            {/* The store description says what the extension is FOR, which is what tells a
+                reviewer whether the thing they are looking at is the thing that should happen. */}
+            {profile.manifest.description ? (
+                <p className="mt-2 text-sm leading-snug text-muted-foreground">{profile.manifest.description}</p>
+            ) : null}
             <ScoreBar score={profile.score} className="mt-3 max-w-48" />
 
             {profile.tags.length > 0 ? (

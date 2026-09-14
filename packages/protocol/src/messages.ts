@@ -172,6 +172,7 @@ export const ManifestSummarySchema = z.object({
  */
 export const UiSurfaceSchema = z.enum([
   "popup",
+  "toolbar_action",
   "options_page",
   "new_tab",
   "side_panel",

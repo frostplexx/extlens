@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Box, Text, useInput, useStdout } from "ink";
 import type { DetectedSurface, SurfaceStatus, UiSurface } from "@extlens/protocol";
-import { scoreSurfaces, VERDICT_LABELS, verdictFor } from "@extlens/protocol";
+import { SURFACE_HINTS, SURFACE_LABELS } from "@extlens/protocol";
 import type { ReportDraftForm } from "../types.js";
 import { c } from "../theme.js";
 import { Cursor } from "./ui.js";
@@ -59,21 +59,6 @@ export function buildReportRows(opts: {
   rows.push({ kind: "submit" });
   return rows;
 }
-
-/** Reviewer-facing surface names, worded as in the web client so reports read the same. */
-export const SURFACE_LABELS: Record<UiSurface, string> = {
-  popup: "Popup window",
-  options_page: "Settings page",
-  new_tab: "Custom new tab",
-  side_panel: "Side panel",
-  devtools: "DevTools panel",
-  context_menu: "Context menu",
-  notifications: "Notifications",
-  keyboard_shortcuts: "Keyboard shortcuts",
-  omnibox: "Omnibox keyword",
-  page_interaction: "Page interaction",
-  background: "Background behaviour",
-};
 
 /** The cycle a surface row steps through, in the order a reviewer most often needs. */
 export const SURFACE_CYCLE: SurfaceStatus[] = ["untested", "working", "partial", "broken", "not_testable"];
@@ -219,17 +204,32 @@ export function ReportForm({
     if (row.kind === "surface") {
       const status = form.surfaceStatus[row.surface] ?? "untested";
       const evidence = surfaceEvidence?.[row.surface];
-      return (
+      // The hint is only worth its row for the surface being judged; every row carrying one
+      // would double the form's height for guidance the reviewer has already read.
+      const detail = focused ? (
+        <Text key={`surface-${row.surface}-hint`} dimColor>
+          {"  "}
+          {SURFACE_HINTS[row.surface]}
+          {evidence ? ` (from ${evidence})` : ""}
+        </Text>
+      ) : null;
+      const line = (
         <Text key={`surface-${row.surface}`}>
           <Cursor selected={focused} />
           <Text dimColor>{SURFACE_LABELS[row.surface].padEnd(20)}</Text>
           <Text color={focused ? c.accent : SURFACE_STATUS_COLORS[status]} bold={focused}>
             {SURFACE_STATUS_LABELS[status]}
           </Text>
-          {focused ? (
-            <Text dimColor>  space/←/→ cycle{evidence ? ` · from ${evidence}` : ""}</Text>
-          ) : null}
+          {focused ? <Text dimColor>  space/←/→ cycle</Text> : null}
         </Text>
+      );
+      return detail ? (
+        <React.Fragment key={`surface-${row.surface}-group`}>
+          {line}
+          {detail}
+        </React.Fragment>
+      ) : (
+        line
       );
     }
     if (row.kind === "boolean") {

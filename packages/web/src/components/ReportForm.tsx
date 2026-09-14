@@ -34,9 +34,38 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import type { DetectedSurface } from "@extlens/protocol";
 import { Badge } from "@/components/ui/badge";
 import { Mono } from "./shared";
 import { SurfaceTable } from "./SurfaceTable";
+
+/**
+ * Surfaces to ask about, falling back to the manifest summary.
+ *
+ * A host running an older build sends no `surfaces`, and the form then said "no user-facing
+ * surfaces detected" for an extension whose popup was listed two panes away — which reads as a
+ * claim about the extension rather than about the host. The manifest summary is always present,
+ * so the three surfaces it can describe are recoverable without it.
+ */
+function surfacesToAsk(profile: ExtensionProfile): DetectedSurface[] {
+    if (profile.surfaces?.length) return profile.surfaces;
+    const fallback: DetectedSurface[] = [];
+    const popup = profile.manifest.action?.defaultPopup;
+    if (popup) fallback.push({ surface: "popup", evidence: `manifest summary: ${popup}` });
+    if (profile.manifest.optionsPage) {
+        fallback.push({ surface: "options_page", evidence: `manifest summary: ${profile.manifest.optionsPage}` });
+    }
+    if (profile.manifest.chromeUrlOverrides?.newtab) {
+        fallback.push({
+            surface: "new_tab",
+            evidence: `manifest summary: ${profile.manifest.chromeUrlOverrides.newtab}`,
+        });
+    }
+    if (profile.manifest.contentScripts?.length) {
+        fallback.push({ surface: "page_interaction", evidence: "manifest summary: content scripts" });
+    }
+    return fallback;
+}
 
 interface Flags {
     hasPopup: boolean;
@@ -106,6 +135,7 @@ export function ReportForm({
     footer?: React.ReactNode;
 }) {
     const flags = useMemo(() => flagsOf(profile), [profile]);
+    const detected = useMemo(() => surfacesToAsk(profile), [profile]);
     const [startedAt, setStartedAt] = useState(() => Date.now());
     const [draft, setDraft] = useState<Draft>(() => initial(profile, saved));
 
@@ -182,7 +212,7 @@ export function ReportForm({
                     mark it “can’t test” when the harness is what is in the way.
                 </FieldDescription>
                 <SurfaceTable
-                    detected={profile.surfaces ?? []}
+                    detected={detected}
                     results={draft.surfaces}
                     onChange={(surface: UiSurface, patch) =>
                         setDraft((d) => ({
@@ -315,7 +345,7 @@ function initial(profile: ExtensionProfile, saved: Report | null): Draft {
         ),
         // One row per detected surface, resuming whatever the saved report said about it. A saved
         // answer for a surface that is no longer detected is dropped: the extension changed.
-        surfaces: (profile.surfaces ?? []).map(
+        surfaces: surfacesToAsk(profile).map(
             ({ surface }) =>
                 saved?.surfaces?.find((r) => r.surface === surface) ?? { surface, status: "untested", note: "" },
         ),
