@@ -81,6 +81,7 @@ export function computeProfile(source: ExtensionSource): ExtensionProfile {
     breakdown: analysis.breakdown,
     tags: analysis.tags,
     listeners: analysis.listeners,
+    surfaces: analysis.surfaces,
     manifest: summarizeManifest(source.manifest, source.files, source.id),
     mv2: null,
     sizeBytes: analysis.sizeBytes,

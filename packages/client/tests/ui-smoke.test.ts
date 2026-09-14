@@ -120,6 +120,10 @@ const subject: AnalyzerSubject = {
     listeners: [
       { api: "chrome.runtime.onMessage", file: "bg.js", line: 12, snippet: "chrome.runtime.onMessage.addListener" },
     ],
+    surfaces: [
+      { surface: "popup", evidence: "action.default_popup: popup.html" },
+      { surface: "context_menu", evidence: "permission: contextMenus" },
+    ],
   },
   files: { mv2: "/tmp/x/mv2" },
   report: null,

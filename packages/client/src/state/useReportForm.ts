@@ -8,10 +8,19 @@
  * capability it declares is broken, "overall: yes" is not a state the form can be left in.
  */
 import { useCallback, useMemo, useState } from "react";
-import type { ExtensionProfile, OverallWorking, Report, ReportDraft } from "@extlens/protocol";
+import type {
+    ExtensionProfile,
+    OverallWorking,
+    Report,
+    ReportDraft,
+    SurfaceResult,
+    SurfaceStatus,
+    UiSurface,
+} from "@extlens/protocol";
+import { scoreSurfaces, verdictFor } from "@extlens/protocol";
 import type { ExtlensClient } from "@extlens/session";
 import type { ReportDraftForm } from "../types.js";
-import { buildReportRows } from "../components/report-form.js";
+import { buildReportRows, SURFACE_CYCLE } from "../components/report-form.js";
 
 /** Which conditional rows this extension's manifest calls for. */
 export interface ManifestFlags {
@@ -66,8 +75,13 @@ export function useReportForm(
     const [form, setForm] = useState<ReportDraftForm | null>(null);
     const flags = useMemo(() => manifestFlags(profile), [profile]);
     const rows = useMemo(
-        () => buildReportRows({ ...flags, listenerCount: profile?.listeners.length ?? 0 }),
-        [flags, profile?.listeners.length],
+        () =>
+            buildReportRows({
+                ...flags,
+                listenerCount: profile?.listeners.length ?? 0,
+                surfaces: profile?.surfaces ?? [],
+            }),
+        [flags, profile?.listeners.length, profile?.surfaces],
     );
 
     const open = useCallback((p: ExtensionProfile | null, saved: Report | null) => {
@@ -87,6 +101,13 @@ export function useReportForm(
             overallWorking: saved?.overallWorking ?? "yes",
             notes: saved?.notes ?? "",
             listenerStatus: statuses,
+            // Resume whatever the saved report said about each detected surface.
+            surfaceStatus: Object.fromEntries(
+                (p.surfaces ?? []).map(({ surface }) => [
+                    surface,
+                    saved?.surfaces?.find((r) => r.surface === surface)?.status ?? "untested",
+                ]),
+            ) as Partial<Record<UiSurface, SurfaceStatus>>,
             cursor: 0,
             notesFocused: false,
             saving: false,
@@ -120,6 +141,11 @@ export function useReportForm(
                     statuses[row.index] = LISTENER_CYCLE[(at + delta + 3) % 3];
                     return { ...f, listenerStatus: statuses };
                 }
+                if (row.kind === "surface") {
+                    const at = SURFACE_CYCLE.indexOf(f.surfaceStatus[row.surface] ?? "untested");
+                    const next = SURFACE_CYCLE[(at + delta + SURFACE_CYCLE.length) % SURFACE_CYCLE.length];
+                    return { ...f, surfaceStatus: { ...f.surfaceStatus, [row.surface]: next } };
+                }
                 if (row.kind === "boolean") {
                     const next = { ...f, [row.field]: !f[row.field] };
                     return { ...next, overallWorking: downgradeOverall(next, flags) };
@@ -140,6 +166,11 @@ export function useReportForm(
     const submit = useCallback(() => {
         if (!form || !subjectId || !profile || form.saving || !client) return;
         setForm((f) => (f ? { ...f, saving: true, error: null } : f));
+        const surfaces: SurfaceResult[] = (profile.surfaces ?? []).map(({ surface }) => ({
+            surface,
+            status: form.surfaceStatus[surface] ?? "untested",
+            note: "",
+        }));
         const draft: ReportDraft = {
             extensionId: subjectId,
             tested: true,
@@ -160,6 +191,11 @@ export function useReportForm(
                 line: l.line,
                 status: form.listenerStatus[i] ?? "untested",
             })),
+            surfaces,
+            // Derived, never asked: both clients use protocol/verdict.ts so a corpus reviewed in
+            // the terminal and in the browser stays comparable.
+            verdict: verdictFor(surfaces),
+            score: scoreSurfaces(surfaces).score,
         };
         void client
             .call<{ id: string }>("reports.submit", { report: draft })

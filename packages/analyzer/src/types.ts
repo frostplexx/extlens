@@ -1,3 +1,5 @@
+import type { DetectedSurface } from "./surfaces.js";
+
 /**
  * Input/output types for the pure analyzer. The analyzer takes an immutable
  * ExtensionSource and returns a new AnalysisProfile. It never mutates its
@@ -54,4 +56,6 @@ export interface AnalysisProfile {
   tags: string[];
   listeners: Listener[];
   sizeBytes: number;
+  /** User-facing surfaces the extension declares or uses, with the evidence for each. */
+  surfaces: DetectedSurface[];
 }

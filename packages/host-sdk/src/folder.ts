@@ -161,6 +161,7 @@ interface ExtensionRow {
   breakdown: string;
   tags: string;
   listeners: string;
+  surfaces: string;
   manifest: string;
   size_bytes: number;
   mtime_ms: number;
@@ -195,6 +196,7 @@ CREATE TABLE IF NOT EXISTS extensions (
   breakdown TEXT NOT NULL,
   tags TEXT NOT NULL,
   listeners TEXT NOT NULL,
+  surfaces TEXT NOT NULL DEFAULT '[]',
   manifest TEXT NOT NULL,
   size_bytes INTEGER NOT NULL,
   mtime_ms INTEGER NOT NULL,
@@ -222,8 +224,26 @@ class FolderBackendImpl implements Backend {
     this.refresh = opts.refresh !== false;
     this.db = new Database(dbPath);
     this.db.exec(SCHEMA);
+    this.migrate();
     this.roots = discoverExtensions(folder);
     this.ingest(opts.onProgress);
+  }
+
+  /**
+   * Bring an index built by an older version up to date.
+   *
+   * The extensions table is a cache re-derived from disk, so a column can simply be added with a
+   * default: rows keep working, and each one picks up real content the next time its directory is
+   * re-ingested. Reports are not a cache, which is why they are stored as an opaque JSON payload
+   * and never need a migration of their own.
+   */
+  private migrate(): void {
+    const columns = this.db.prepare("PRAGMA table_info(extensions)").all() as { name: string }[];
+    if (!columns.some((c) => c.name === "surfaces")) {
+      this.db.exec("ALTER TABLE extensions ADD COLUMN surfaces TEXT NOT NULL DEFAULT '[]'");
+      // Force a re-analysis: a default of [] would otherwise read as "this extension has no UI".
+      this.db.exec("UPDATE extensions SET mtime_ms = -1");
+    }
   }
 
   private ingest(onProgress?: (done: number, total: number) => void): void {
@@ -245,6 +265,7 @@ class FolderBackendImpl implements Backend {
         breakdown = excluded.breakdown,
         tags = excluded.tags,
         listeners = excluded.listeners,
+        surfaces = excluded.surfaces,
         manifest = excluded.manifest,
         size_bytes = excluded.size_bytes,
         mtime_ms = excluded.mtime_ms,
@@ -273,6 +294,7 @@ class FolderBackendImpl implements Backend {
         breakdown: JSON.stringify(profile.breakdown),
         tags: JSON.stringify(profile.tags),
         listeners: JSON.stringify(profile.listeners),
+        surfaces: JSON.stringify(profile.surfaces ?? []),
         manifest: JSON.stringify(profile.manifest),
         sizeBytes: profile.sizeBytes,
         mtimeMs: mtime,
@@ -318,6 +340,7 @@ class FolderBackendImpl implements Backend {
       breakdown: JSON.parse(row.breakdown),
       tags: JSON.parse(row.tags) as string[],
       listeners: JSON.parse(row.listeners),
+      surfaces: JSON.parse(row.surfaces ?? "[]"),
       manifest: JSON.parse(row.manifest),
       sizeBytes: row.size_bytes,
       hasMv3: false,

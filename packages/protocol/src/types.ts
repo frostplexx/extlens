@@ -17,6 +17,10 @@ import type {
   ReportSchema,
   ScoreBreakdownSchema,
   SortOrderSchema,
+  SurfaceResultSchema,
+  SurfaceStatusSchema,
+  UiSurfaceSchema,
+  ExtensionVerdictSchema,
 } from "./messages.js";
 
 /**
@@ -41,3 +45,9 @@ export type ListenerTestResult = z.infer<typeof ListenerTestResultSchema>;
 export type HostStatus = z.infer<typeof HostStatusSchema>;
 export type LogLine = z.infer<typeof LogLineSchema>;
 export type HostLogResult = z.infer<typeof HostLogResultSchema>;
+
+export type UiSurface = z.infer<typeof UiSurfaceSchema>;
+export type SurfaceStatus = z.infer<typeof SurfaceStatusSchema>;
+export type SurfaceResult = z.infer<typeof SurfaceResultSchema>;
+export type ExtensionVerdict = z.infer<typeof ExtensionVerdictSchema>;
+export type DetectedSurface = { surface: UiSurface; evidence: string };

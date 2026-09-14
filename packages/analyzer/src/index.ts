@@ -13,6 +13,7 @@ import { tagExtension } from "./feature-tagger.js";
 import { resolveManifestStrings } from "./i18n.js";
 import { extractListeners } from "./listener-extractor.js";
 import { analyzeManifest } from "./manifest-analyzer.js";
+import { detectSurfaces } from "./surfaces.js";
 import { emptyBreakdown, scoreBreakdown, type ScoreBreakdown } from "./scoring.js";
 import { calculateSize } from "./size.js";
 import type { AnalysisProfile, ExtensionSource } from "./types.js";
@@ -20,6 +21,8 @@ import type { AnalysisProfile, ExtensionSource } from "./types.js";
 export { DANGEROUS_PERMISSIONS, WEIGHTS } from "./scoring.js";
 export type { ScoreBreakdown } from "./scoring.js";
 export { extractListeners } from "./listener-extractor.js";
+export { detectSurfaces, UI_SURFACES } from "./surfaces.js";
+export type { DetectedSurface, UiSurface } from "./surfaces.js";
 export { extensionIdFromKey, resolveManifestStrings } from "./i18n.js";
 export type { AnalysisProfile, ExtensionSource, Listener, Manifest, SourceFile } from "./types.js";
 
@@ -44,6 +47,7 @@ export function analyzeExtension(source: ExtensionSource): AnalysisProfile {
 
   const tags = tagExtension(source.manifest, breakdown, source.files);
   const listeners = extractListeners(source.files);
+  const surfaces = detectSurfaces(source.manifest, source.files);
   const score = scoreBreakdown(breakdown);
 
   const manifestVersion =
@@ -61,6 +65,7 @@ export function analyzeExtension(source: ExtensionSource): AnalysisProfile {
     breakdown,
     tags,
     listeners,
+    surfaces,
     sizeBytes,
   };
 }

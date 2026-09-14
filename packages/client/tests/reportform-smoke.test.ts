@@ -27,6 +27,7 @@ const form: ReportDraftForm = {
   overallWorking: "yes",
   notes: "",
   listenerStatus: ["untested", "yes"],
+  surfaceStatus: { popup: "working", context_menu: "broken" },
   cursor: 0,
   notesFocused: false,
   saving: false,
@@ -86,5 +87,68 @@ describe("report form", () => {
     expect(out).not.toContain("Is Settings Working");
     expect(out).not.toContain("Is New Tab Working");
     expect(out).toContain("Overall Working");
+  });
+});
+
+describe("surface rows", () => {
+  it("asks about every detected surface instead of the fixed three", async () => {
+    // The old form had popup/settings/newtab fields and nothing else, so an extension whose only
+    // UI was a context menu had nowhere to record that its one feature was broken.
+    const rows = buildReportRows({
+      hasPopup: true,
+      hasSettings: false,
+      isNewTab: false,
+      listenerCount: 0,
+      surfaces: [
+        { surface: "popup", evidence: "action.default_popup: popup.html" },
+        { surface: "context_menu", evidence: "permission: contextMenus" },
+        { surface: "keyboard_shortcuts", evidence: "commands: do-thing" },
+      ],
+    });
+    expect(rows.filter((r) => r.kind === "surface").map((r) => (r as { surface: string }).surface)).toEqual([
+      "popup",
+      "context_menu",
+      "keyboard_shortcuts",
+    ]);
+    // The legacy booleans must not double up with the surface rows.
+    expect(rows.some((r) => r.kind === "boolean" && r.field === "isPopupWorking")).toBe(false);
+  });
+
+  it("falls back to the legacy booleans for a host that reports no surfaces", () => {
+    // An older host keeps a usable form rather than one with nothing to judge.
+    const rows = buildReportRows({ hasPopup: true, hasSettings: true, isNewTab: false, listenerCount: 0 });
+    expect(rows.some((r) => r.kind === "boolean" && r.field === "isPopupWorking")).toBe(true);
+    expect(rows.some((r) => r.kind === "surface")).toBe(false);
+  });
+
+  it("renders each surface with its status", async () => {
+    const rows = buildReportRows({
+      hasPopup: false,
+      hasSettings: false,
+      isNewTab: false,
+      listenerCount: 0,
+      surfaces: [
+        { surface: "popup", evidence: "action.default_popup: popup.html" },
+        { surface: "context_menu", evidence: "permission: contextMenus" },
+      ],
+    });
+    const out = await capture(
+      React.createElement(ReportForm, {
+        form,
+        rows,
+        auto: { name: "x", mv2Id: null, mv3Id: null, elapsedSecs: 0 },
+        onCycle: () => {},
+        onMove: () => {},
+        onToggleNotes: () => {},
+        onNotesChange: () => {},
+        onSubmit: () => {},
+        onCancel: () => {},
+        listenerApis: [],
+      } as never),
+    );
+    expect(out).toContain("Popup window");
+    expect(out).toContain("works");
+    expect(out).toContain("Context menu");
+    expect(out).toContain("broken");
   });
 });

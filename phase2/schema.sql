@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS extensions (
   breakdown TEXT NOT NULL,           -- JSON of the ScoreBreakdown
   tags TEXT NOT NULL,                -- JSON array
   listeners TEXT NOT NULL,           -- JSON array of Listener
+  surfaces TEXT NOT NULL DEFAULT '[]', -- JSON array of DetectedSurface
   manifest TEXT NOT NULL,            -- JSON of the ManifestSummary
   size_bytes INTEGER NOT NULL,
   mtime_ms INTEGER NOT NULL,         -- manifest mtime; re-ingest when it changes

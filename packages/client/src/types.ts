@@ -1,4 +1,11 @@
-import type { ExtensionLight, ListStats, OverallWorking, SortOrder } from "@extlens/protocol";
+import type {
+  ExtensionLight,
+  ListStats,
+  OverallWorking,
+  SortOrder,
+  SurfaceStatus,
+  UiSurface,
+} from "@extlens/protocol";
 
 // Session-level shapes belong to @extlens/session, which both front ends share; re-exported here
 // so client modules keep importing their UI types from one place.
@@ -40,6 +47,8 @@ export interface ReportDraftForm {
   overallWorking: OverallWorking;
   notes: string;
   listenerStatus: ("untested" | "yes" | "no")[];
+  /** One status per detected surface; the per-extension score and verdict derive from these. */
+  surfaceStatus: Partial<Record<UiSurface, SurfaceStatus>>;
   /** Index of the focused row in the visible row list. */
   cursor: number;
   notesFocused: boolean;

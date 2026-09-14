@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { Box, Text, useInput, useStdout } from "ink";
+import type { DetectedSurface, SurfaceStatus, UiSurface } from "@extlens/protocol";
+import { scoreSurfaces, VERDICT_LABELS, verdictFor } from "@extlens/protocol";
 import type { ReportDraftForm } from "../types.js";
 import { c } from "../theme.js";
 import { Cursor } from "./ui.js";
@@ -25,7 +27,8 @@ export type FormRow =
   | { kind: "overall" }
   | { kind: "notes" }
   | { kind: "submit" }
-  | { kind: "listener"; index: number };
+  | { kind: "listener"; index: number }
+  | { kind: "surface"; surface: UiSurface };
 
 /** Visible row order: listeners, then the ExtPorter quick assessment. */
 export function buildReportRows(opts: {
@@ -33,21 +36,63 @@ export function buildReportRows(opts: {
   hasSettings: boolean;
   isNewTab: boolean;
   listenerCount: number;
+  /** Surfaces detected in the source; one row each, replacing the fixed popup/settings/newtab set. */
+  surfaces?: DetectedSurface[];
 }): FormRow[] {
   const rows: FormRow[] = [];
   for (let i = 0; i < opts.listenerCount; i += 1) rows.push({ kind: "listener", index: i });
+  const surfaces = opts.surfaces ?? [];
+  for (const { surface } of surfaces) rows.push({ kind: "surface", surface });
   rows.push({ kind: "boolean", field: "installs" });
   rows.push({ kind: "boolean", field: "worksInMv2" });
   rows.push({ kind: "boolean", field: "needsLogin" });
-  if (opts.hasPopup) rows.push({ kind: "boolean", field: "isPopupWorking" });
-  if (opts.hasSettings) rows.push({ kind: "boolean", field: "isSettingsWorking" });
-  if (opts.isNewTab) rows.push({ kind: "boolean", field: "isNewTabWorking" });
+  // The three legacy per-surface booleans only appear for a host that reports no surfaces at all,
+  // so an older host keeps a usable form instead of one with nothing to judge.
+  if (surfaces.length === 0) {
+    if (opts.hasPopup) rows.push({ kind: "boolean", field: "isPopupWorking" });
+    if (opts.hasSettings) rows.push({ kind: "boolean", field: "isSettingsWorking" });
+    if (opts.isNewTab) rows.push({ kind: "boolean", field: "isNewTabWorking" });
+  }
   rows.push({ kind: "boolean", field: "isInteresting" });
   rows.push({ kind: "overall" });
   rows.push({ kind: "notes" });
   rows.push({ kind: "submit" });
   return rows;
 }
+
+/** Reviewer-facing surface names, worded as in the web client so reports read the same. */
+export const SURFACE_LABELS: Record<UiSurface, string> = {
+  popup: "Popup window",
+  options_page: "Settings page",
+  new_tab: "Custom new tab",
+  side_panel: "Side panel",
+  devtools: "DevTools panel",
+  context_menu: "Context menu",
+  notifications: "Notifications",
+  keyboard_shortcuts: "Keyboard shortcuts",
+  omnibox: "Omnibox keyword",
+  page_interaction: "Page interaction",
+  background: "Background behaviour",
+};
+
+/** The cycle a surface row steps through, in the order a reviewer most often needs. */
+export const SURFACE_CYCLE: SurfaceStatus[] = ["untested", "working", "partial", "broken", "not_testable"];
+
+const SURFACE_STATUS_LABELS: Record<SurfaceStatus, string> = {
+  untested: "untested",
+  working: "works",
+  partial: "partly works",
+  broken: "broken",
+  not_testable: "can't test",
+};
+
+const SURFACE_STATUS_COLORS: Record<SurfaceStatus, string | undefined> = {
+  untested: c.muted,
+  working: c.success,
+  partial: c.warning,
+  broken: c.danger,
+  not_testable: c.info,
+};
 
 const BOOLEAN_LABELS: Record<BooleanField, string> = {
   installs: "Installs",
@@ -90,6 +135,7 @@ export function ReportForm({
   onSubmit,
   onCancel,
   listenerApis,
+  surfaceEvidence,
 }: {
   form: ReportDraftForm;
   rows: FormRow[];
@@ -101,6 +147,8 @@ export function ReportForm({
   onSubmit: () => void;
   onCancel: () => void;
   listenerApis: { api: string; file: string }[];
+  /** Why each surface was detected, shown on the focused row so the question makes sense. */
+  surfaceEvidence?: Partial<Record<UiSurface, string>>;
 }) {
   const [notesDraft, setNotesDraft] = useState(form.notes);
 
@@ -165,6 +213,22 @@ export function ReportForm({
           <Text color={focused ? c.accent : undefined} bold={focused}>
             {LISTENER_STATUS_LABELS[status]}
           </Text>
+        </Text>
+      );
+    }
+    if (row.kind === "surface") {
+      const status = form.surfaceStatus[row.surface] ?? "untested";
+      const evidence = surfaceEvidence?.[row.surface];
+      return (
+        <Text key={`surface-${row.surface}`}>
+          <Cursor selected={focused} />
+          <Text dimColor>{SURFACE_LABELS[row.surface].padEnd(20)}</Text>
+          <Text color={focused ? c.accent : SURFACE_STATUS_COLORS[status]} bold={focused}>
+            {SURFACE_STATUS_LABELS[status]}
+          </Text>
+          {focused ? (
+            <Text dimColor>  space/←/→ cycle{evidence ? ` · from ${evidence}` : ""}</Text>
+          ) : null}
         </Text>
       );
     }

@@ -8,7 +8,15 @@
  */
 import * as React from "react";
 import { useEffect, useMemo, useState } from "react";
-import type { ExtensionProfile, OverallWorking, Report, ReportDraft } from "@extlens/protocol";
+import type {
+    ExtensionProfile,
+    OverallWorking,
+    Report,
+    ReportDraft,
+    SurfaceResult,
+    UiSurface,
+} from "@extlens/protocol";
+import { scoreSurfaces, VERDICT_LABELS, verdictFor } from "@extlens/protocol";
 import { Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -26,7 +34,9 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { Mono } from "./shared";
+import { SurfaceTable } from "./SurfaceTable";
 
 interface Flags {
     hasPopup: boolean;
@@ -53,6 +63,7 @@ interface Draft {
     overallWorking: OverallWorking;
     notes: string;
     listeners: ("untested" | "yes" | "no")[];
+    surfaces: SurfaceResult[];
 }
 
 /** A failing quick assessment downgrades the overall verdict; "yes" must not survive one. */
@@ -112,6 +123,8 @@ export function ReportForm({
         });
 
     const reason = downgradeReason(draft, flags);
+    const summary = scoreSurfaces(draft.surfaces);
+    const verdict = verdictFor(draft.surfaces);
 
     const submit = () =>
         onSubmit({
@@ -134,6 +147,11 @@ export function ReportForm({
                 line: l.line,
                 status: draft.listeners[i] ?? "untested",
             })),
+            surfaces: draft.surfaces,
+            // Derived, not asked: both clients compute them the same way (protocol/verdict.ts) so
+            // a corpus reviewed in two places stays comparable.
+            verdict,
+            score: summary.score,
         });
 
     return (
@@ -149,39 +167,56 @@ export function ReportForm({
                         checked={draft.isInteresting}
                         onChange={(v) => set("isInteresting", v)}
                     />
-                    {flags.hasPopup ? (
-                        <Check
-                            id="popup"
-                            label="Popup works"
-                            checked={draft.isPopupWorking}
-                            onChange={(v) => set("isPopupWorking", v)}
-                        />
-                    ) : null}
-                    {flags.hasSettings ? (
-                        <Check
-                            id="options"
-                            label="Options page works"
-                            checked={draft.isSettingsWorking}
-                            onChange={(v) => set("isSettingsWorking", v)}
-                        />
-                    ) : null}
-                    {flags.isNewTab ? (
-                        <Check
-                            id="newtab"
-                            label="New tab works"
-                            checked={draft.isNewTabWorking}
-                            onChange={(v) => set("isNewTabWorking", v)}
-                        />
-                    ) : null}
                 </div>
             </FieldSet>
 
             <FieldSeparator />
 
+            {/* Per-surface results, one row per thing this extension actually exposes. The verdict
+                and the score below are computed from them rather than asked for separately —
+                a reviewer who has judged every surface has already given the answer. */}
+            <Field>
+                <FieldLabel>User-facing surfaces</FieldLabel>
+                <FieldDescription>
+                    Judge each surface the extension has. Leave one untested rather than guessing, and
+                    mark it “can’t test” when the harness is what is in the way.
+                </FieldDescription>
+                <SurfaceTable
+                    detected={profile.surfaces ?? []}
+                    results={draft.surfaces}
+                    onChange={(surface: UiSurface, patch) =>
+                        setDraft((d) => ({
+                            ...d,
+                            surfaces: d.surfaces.map((r) => (r.surface === surface ? { ...r, ...patch } : r)),
+                        }))
+                    }
+                />
+            </Field>
+
             <Field orientation="responsive">
                 <FieldContent>
-                    <FieldLabel htmlFor="overall">Overall</FieldLabel>
-                    {reason ? <FieldDescription>{reason}</FieldDescription> : null}
+                    <FieldLabel>Verdict</FieldLabel>
+                    <FieldDescription>
+                        {summary.testable === 0
+                            ? "Nothing testable yet — judge a surface above."
+                            : `${summary.working} working, ${summary.partial} partial, ${summary.broken} broken of ${summary.testable} testable` +
+                              (summary.notTestable > 0 ? ` · ${summary.notTestable} excluded as untestable` : "")}
+                    </FieldDescription>
+                </FieldContent>
+                <div className="flex items-center gap-3">
+                    <Badge variant={verdictTone(verdict)}>{VERDICT_LABELS[verdict]}</Badge>
+                    <span className="text-sm tabular-nums text-muted-foreground">
+                        {summary.score === null ? "—" : summary.score.toFixed(2)}
+                    </span>
+                </div>
+            </Field>
+
+            <Field orientation="responsive">
+                <FieldContent>
+                    <FieldLabel htmlFor="overall">Overall (legacy)</FieldLabel>
+                    <FieldDescription>
+                        {reason ?? "Kept so reports stay comparable with the pre-surface corpus."}
+                    </FieldDescription>
                 </FieldContent>
                 <Select
                     value={draft.overallWorking}
@@ -278,6 +313,12 @@ function initial(profile: ExtensionProfile, saved: Report | null): Draft {
         listeners: profile.listeners.map(
             (l) => saved?.listeners.find((r) => r.api === l.api && r.file === l.file)?.status ?? "untested",
         ),
+        // One row per detected surface, resuming whatever the saved report said about it. A saved
+        // answer for a surface that is no longer detected is dropped: the extension changed.
+        surfaces: (profile.surfaces ?? []).map(
+            ({ surface }) =>
+                saved?.surfaces?.find((r) => r.surface === surface) ?? { surface, status: "untested", note: "" },
+        ),
     };
 }
 
@@ -300,4 +341,11 @@ function Check({
             </FieldLabel>
         </Field>
     );
+}
+
+/** Badge tone for a verdict. Partial is a warning, not a failure — it is the common outcome. */
+function verdictTone(verdict: ReturnType<typeof verdictFor>): "default" | "secondary" | "destructive" | "outline" {
+    if (verdict === "working") return "default";
+    if (verdict === "not_working") return "destructive";
+    return "secondary";
 }

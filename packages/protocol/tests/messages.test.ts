@@ -186,12 +186,13 @@ describe("extensions.list result", () => {
 
 describe("extensions.get result", () => {
   test("round-trips a profile", () => {
-    expect(ExtensionProfileSchema.parse(profile)).toEqual(profile);
+    // `surfaces` defaults in for a profile written before surface detection existed.
+    expect(ExtensionProfileSchema.parse(profile)).toEqual({ ...profile, surfaces: [] });
   });
 
   test("round-trips the extensions.get result wrapper", () => {
     expect(MethodsSchema["extensions.get"].result.parse({ extension: profile })).toEqual({
-      extension: profile,
+      extension: { ...profile, surfaces: [] },
     });
   });
 
@@ -244,8 +245,11 @@ describe("reports", () => {
     ],
   };
 
+  /** What a report written before per-surface results gains on re-validation. */
+  const surfaceDefaults = { surfaces: [], verdict: null, score: null };
+
   test("round-trips a draft", () => {
-    expect(ReportDraftSchema.parse(draft)).toEqual(draft);
+    expect(ReportDraftSchema.parse(draft)).toEqual({ ...draft, ...surfaceDefaults });
   });
 
   test("round-trips a full report", () => {
@@ -255,7 +259,26 @@ describe("reports", () => {
       createdAt: "2025-01-01T00:00:00.000Z",
       updatedAt: "2025-01-01T00:00:00.000Z",
     };
-    expect(ReportSchema.parse(report)).toEqual(report);
+    expect(ReportSchema.parse(report)).toEqual({ ...report, ...surfaceDefaults });
+  });
+
+  test("keeps a report carrying per-surface results intact", () => {
+    const withSurfaces = {
+      ...draft,
+      surfaces: [
+        { surface: "popup", status: "working", note: "" },
+        { surface: "context_menu", status: "broken", note: "entry never appears" },
+      ],
+      verdict: "partially_working",
+      score: 0.5,
+    };
+    expect(ReportDraftSchema.parse(withSurfaces)).toEqual(withSurfaces);
+  });
+
+  test("rejects a surface name the protocol does not define", () => {
+    // A result row naming a surface the reader cannot enumerate is not analysable later.
+    const bad = { ...draft, surfaces: [{ surface: "sidebar", status: "working", note: "" }] };
+    expect(() => ReportDraftSchema.parse(bad)).toThrow();
   });
 
   test("rejects an unknown listener status", () => {

@@ -164,6 +164,56 @@ export const ManifestSummarySchema = z.object({
   chromeUrlOverrides: z.object({ newtab: z.string().nullable() }),
 });
 
+/**
+ * The user-facing surfaces a review can cover.
+ *
+ * Kept in the protocol rather than derived per client so a stored report stays readable: a result
+ * row naming a surface the reader cannot enumerate is not analysable later.
+ */
+export const UiSurfaceSchema = z.enum([
+  "popup",
+  "options_page",
+  "new_tab",
+  "side_panel",
+  "devtools",
+  "context_menu",
+  "notifications",
+  "keyboard_shortcuts",
+  "omnibox",
+  "page_interaction",
+  "background",
+]);
+
+/**
+ * What the reviewer saw for one surface.
+ *
+ * "not_testable" is a first-class outcome, not a flavour of broken: an extension whose popup
+ * needs a paid account is evidence about the harness, not about the migration, and collapsing the
+ * two is what makes a success rate unfalsifiable.
+ */
+export const SurfaceStatusSchema = z.enum(["untested", "working", "partial", "broken", "not_testable"]);
+
+export const SurfaceResultSchema = z.object({
+  surface: UiSurfaceSchema,
+  status: SurfaceStatusSchema,
+  /** Why it is broken or untestable, in the reviewer's words. */
+  note: z.string().default(""),
+});
+
+/**
+ * Per-extension verdict.
+ *
+ * Four states rather than the older tri-state boolean, because "some of it works" is the common
+ * outcome of an MV3 migration and had nowhere to go: a partially working extension had to be
+ * recorded as either a success or a total loss.
+ */
+export const ExtensionVerdictSchema = z.enum([
+  "working",
+  "partially_working",
+  "not_working",
+  "not_testable",
+]);
+
 export const ExtensionProfileSchema = z.object({
   id: ExtensionIdSchema,
   name: z.string(),
@@ -173,6 +223,8 @@ export const ExtensionProfileSchema = z.object({
   breakdown: ScoreBreakdownSchema,
   tags: z.array(z.string()),
   listeners: z.array(ListenerSchema),
+  /** Surfaces detected in the source, so a client can ask about exactly what exists. */
+  surfaces: z.array(z.object({ surface: UiSurfaceSchema, evidence: z.string() })).default([]),
   manifest: ManifestSummarySchema,
   /** Manifest summary of the mv2 source, when the extension was migrated. */
   mv2: ManifestSummarySchema.nullable().optional(),
@@ -233,6 +285,15 @@ export const ReportDraftSchema = z.object({
   overallWorking: ReportOverallWorkingSchema.nullable().default(null),
   notes: z.string().default(""),
   listeners: z.array(ListenerTestResultSchema).default([]),
+  /** One row per surface the extension has. Empty on reports written before surfaces existed. */
+  surfaces: z.array(SurfaceResultSchema).default([]),
+  /** Four-state verdict. Null on legacy reports, which carry overallWorking instead. */
+  verdict: ExtensionVerdictSchema.nullable().default(null),
+  /**
+   * Preserved-behaviour score in [0, 1]: the share of testable surfaces that still work, with a
+   * partial counting as a half. Null when nothing was testable — which is not the same as zero.
+   */
+  score: z.number().min(0).max(1).nullable().default(null),
 });
 
 /** Full report as returned by reports.get. */
