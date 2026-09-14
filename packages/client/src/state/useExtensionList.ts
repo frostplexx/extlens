@@ -7,7 +7,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ExtensionLight, ListResult, SortOrder } from "@extlens/protocol";
-import type { ExtlensClient } from "../api.js";
+import type { ExtlensClient } from "@extlens/session";
 import type { ConnectionStatus, ExplorerState } from "../types.js";
 
 export const SORTS: SortOrder[] = ["interestingness_desc", "interestingness_asc", "name"];

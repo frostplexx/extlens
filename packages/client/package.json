@@ -5,9 +5,9 @@
   "type": "module",
   "dependencies": {
     "@extlens/protocol": "*",
+    "@extlens/session": "*",
     "ink": "^5.2.0",
     "ink-text-input": "^6.0.0",
-    "playwright": "^1.61.1",
     "react": "^18.3.1",
     "string-width": "^7.2.0",
     "zod": "^3.25.76"

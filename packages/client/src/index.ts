@@ -2,7 +2,7 @@
 import React from "react";
 import { render } from "ink";
 import { App } from "./app.js";
-import { parseSshSpec } from "./ssh.js";
+import { parseSshSpec } from "@extlens/session";
 
 /**
  * Client entrypoint. Local host URL: --ws flag, else EXTLENS_WS env, else the

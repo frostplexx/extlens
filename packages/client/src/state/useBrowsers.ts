@@ -13,8 +13,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { FileRefs } from "@extlens/protocol";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { installChrome, missingBrowserMessage } from "../browsers/install.js";
-import { BrowserManager, resolveExecutable } from "../browsers/manager.js";
+import { installChrome, missingBrowserMessage } from "@extlens/session";
+import { BrowserManager, resolveExecutable } from "@extlens/session";
 import type { BrowserState } from "../types.js";
 
 export type BrowserLabel = "mv2" | "mv3";

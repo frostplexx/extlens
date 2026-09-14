@@ -7,7 +7,7 @@
  */
 import React, { useCallback, useState } from "react";
 import { Box, Text, useApp, useStdout } from "ink";
-import type { SshSpec } from "./ssh.js";
+import type { SshSpec } from "@extlens/session";
 import { hintsFor, type Scope } from "./keys/keymap.js";
 import { useKeymap, type Capture } from "./keys/useKeymap.js";
 import { isCompact, listPageSize, contentRows, MIN_ROWS } from "./layout.js";

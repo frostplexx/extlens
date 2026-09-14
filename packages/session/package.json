@@ -1,0 +1,19 @@
+{
+  "name": "@extlens/session",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@extlens/protocol": "*",
+    "playwright": "^1.61.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  }
+}

@@ -11,8 +11,8 @@
  */
 import { useCallback, useState } from "react";
 import type { ExtensionLight, ExtensionProfile, FileRefs, Report } from "@extlens/protocol";
-import type { ExtlensClient } from "../api.js";
-import type { SshManager } from "../ssh.js";
+import type { ExtlensClient } from "@extlens/session";
+import type { SshManager } from "@extlens/session";
 import type { ExtensionList } from "./useExtensionList.js";
 
 export interface AnalyzerSubject {

@@ -7,7 +7,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { HostLogResult, HostStatus, LogLine } from "@extlens/protocol";
-import type { ExtlensClient } from "../api.js";
+import type { ExtlensClient } from "@extlens/session";
 import type { ConnectionStatus } from "../types.js";
 
 /** How often to re-read host.status and host.log while a job runs. */

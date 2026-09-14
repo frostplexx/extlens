@@ -1,7 +1,7 @@
 import React from "react";
 import { Box, Text, useStdout } from "ink";
 import type { ManifestSummary, ScoreBreakdown } from "@extlens/protocol";
-import { BROWSER_DIR } from "../browsers/install.js";
+import { BROWSER_DIR } from "@extlens/session";
 import { contentRows } from "../layout.js";
 import type { AnalyzerSubject } from "../state/useAnalyzer.js";
 import type { Browsers } from "../state/useBrowsers.js";

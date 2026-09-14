@@ -1,6 +1,6 @@
 import React from "react";
 import { Box, Text } from "ink";
-import type { TunnelStatus } from "../ssh.js";
+import type { TunnelStatus } from "@extlens/session";
 import { c } from "../theme.js";
 import { Rule } from "./ui.js";
 

@@ -1,5 +1,9 @@
 import type { ExtensionLight, ListStats, OverallWorking, SortOrder } from "@extlens/protocol";
 
+// Session-level shapes belong to @extlens/session, which both front ends share; re-exported here
+// so client modules keep importing their UI types from one place.
+export type { BrowserPhase, BrowserState, ConnectionStatus } from "@extlens/session";
+
 /**
  * UI state shared across components.
  *
@@ -10,8 +14,6 @@ import type { ExtensionLight, ListStats, OverallWorking, SortOrder } from "@extl
 
 /** Which screen the client shows. There is no tab bar; enter/esc move between explorer and analyzer. */
 export type View = "explorer" | "analyzer" | "log";
-
-export type ConnectionStatus = "connecting" | "connected" | "disconnected";
 
 export interface ExplorerState {
   lights: ExtensionLight[];
@@ -25,21 +27,6 @@ export interface ExplorerState {
   selectedIndex: number;
   loading: boolean;
   error: string | null;
-}
-
-export type BrowserPhase =
-  | "idle"
-  | "launching"
-  | "detecting"
-  | "loaded"
-  | "failed"
-  | "closed"
-  | "downloading";
-
-export interface BrowserState {
-  phase: BrowserPhase;
-  message: string | null;
-  extensionId: string | null;
 }
 
 export interface ReportDraftForm {

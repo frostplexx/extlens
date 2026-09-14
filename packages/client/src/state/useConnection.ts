@@ -8,9 +8,9 @@
  * it in one file is what lets every other hook simply take `client` and `status` as inputs.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ExtlensClient } from "../api.js";
-import { createSshManager } from "../ssh.js";
-import type { SshManager, SshSpec, TunnelStatus } from "../ssh.js";
+import { ExtlensClient } from "@extlens/session";
+import { createSshManager } from "@extlens/session";
+import type { SshManager, SshSpec, TunnelStatus } from "@extlens/session";
 import type { ConnectionStatus } from "../types.js";
 
 export interface PasswordPrompt {

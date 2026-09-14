@@ -1,9 +1,10 @@
 # extlens — extension analysis + review toolchain
 
 extlens is a protocol-first tool for analyzing and reviewing Chrome extensions.
-An ink terminal client connects over WebSocket to any host that embeds the
-`extlens-sdk`. The SDK serves a documented JSON-RPC protocol (PROTOCOL.md) and
-computes profiles with a pure analyzer. The client never touches host storage.
+Two front ends connect over WebSocket to any host that embeds the `extlens-sdk`:
+an ink terminal client and a local web UI. The SDK serves a documented JSON-RPC
+protocol (PROTOCOL.md) and computes profiles with a pure analyzer. Neither
+client touches host storage.
 
 ## What works today
 
@@ -14,6 +15,9 @@ computes profiles with a pure analyzer. The client never touches host storage.
 - Ink client with two tabs: explorer (search, sort, pagination, score bars,
   tags) and analyzer (profile view, dual-browser launch via playwright, manual
   report form).
+- Web UI (`npm run web`): a local React/Tailwind page served by a node process
+  that keeps the browser launching. Dense sortable table, detail pane, real form
+  controls, collapsible host log.
 - A real adapter: AgenticMigrator (`src/extlens/` in that repo) serves its
   `run/` outputs.
 - Folder mode: `extlens serve <folder>` ingests a plain directory of
@@ -100,6 +104,43 @@ When a browser is missing, the analyzer tab asks whether to download Chrome
 for Testing and installs it under `EXTLENS_BROWSER_DIR`. MV2 gets Chrome 116
 (the last build that loads MV2 extensions); MV3 gets the latest stable build.
 
+## Web UI
+
+```sh
+npm run web          # build the page, serve it, print a tokenised localhost URL
+```
+
+The printed URL includes a one-off token; the server binds `127.0.0.1` and
+rejects any bridge connection without it.
+
+Everything the terminal client does locally, the web server does instead:
+
+```
+browser tab ──ws──► node server ──ws (or ssh -L)──► extlens host
+                        └──► playwright ──► Chrome for Testing (MV2 / MV3)
+```
+
+That is why a web UI can still launch the test browsers. The page cannot spawn
+a process, but the process serving the page can, and it is the same process that
+runs the ssh tunnel and downloads remote file refs. Methods starting `local.*`
+are handled by that process; everything else is relayed to the host untouched,
+so the web UI adds nothing to the protocol.
+
+Browser state (launching, loaded, download progress) is pushed to every open tab
+rather than polled, because it changes on the server's schedule — a download
+progressing, or Chrome being closed by hand.
+
+Flags mirror the terminal client: `--ws`, `--ssh`, `--remote-port`, plus
+`--port` (default 8090) and `EXTLENS_WEB_TOKEN` to pin the token. With `--ssh`,
+the password prompt appears in the terminal running the server, before any tab
+connects.
+
+For UI development, `npm run web:dev` runs vite on :5173 with HMR; keep
+`npm run start --workspace packages/web` running alongside it for the bridge,
+and open the :5173 page with the same `?token=` query.
+
+Keyboard: `/` search, `j`/`k` select, `b`/`x` launch/close browsers, `l` log.
+
 ## SSH mode
 
 With `--ssh`, the client uses the system `ssh` binary to reach the remote
@@ -124,10 +165,18 @@ URL. Quit the client to stop the retry loop.
 packages/protocol   — zod schemas + types; the single source of truth for the wire format
 packages/analyzer   — pure analysis functions (no dependencies)
 packages/host-sdk   — extlens-sdk: ws server, Backend contract, profile computation
+packages/session    — node-side session: ws client, ssh tunnel, Chrome for Testing control
 packages/client     — ink TUI (private, not published)
+packages/web        — local web UI: react + vite + tailwind page, plus the node server
+                      that serves it and owns the browsers
 examples/           — stub host server over the fixtures
 fixtures/           — synthetic extensions with hand-computed golden scores
 ```
+
+`packages/session` exists because driving a host and driving local browsers is
+the same work whether the UI is a terminal or a browser tab. It has no UI
+framework and no rendering; both front ends depend on it, so there is one
+implementation of the tunnel, the reconnect logic and the browser launch.
 
 ### Client architecture
 
@@ -154,6 +203,21 @@ to know its height takes it as a prop, so no view can quietly render taller than
 input lives only in `keys/` — a component never calls `useInput` for a binding; it either gets a
 handler or, if it is modal, gets pushed onto the capture stack in `app.tsx`, where precedence is
 visible as array order.
+
+### Web architecture
+
+```
+packages/web/server/index.ts   — http + ws, static serving, token check, host link
+packages/web/server/bridge.ts  — local.* methods: browser launch/close, download prompts
+packages/web/src/bridge.ts     — the page's socket: RPC promises + pushed events
+packages/web/src/hooks/*.ts    — useBridge, useExtensions, useProfile, useHostJob
+packages/web/src/components/*  — table, detail pane, report form, log dock (presentational)
+```
+
+The same rule as the TUI: hooks own behaviour, `App.tsx` is wiring. Colours come
+from `src/index.css` as Tailwind `@theme` tokens, using the same Catppuccin
+Mocha palette as `packages/client/src/theme.ts`, so the two front ends read as
+one tool.
 
 ## Docs
 

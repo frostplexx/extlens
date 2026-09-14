@@ -9,7 +9,7 @@
  */
 import { useCallback, useMemo, useState } from "react";
 import type { ExtensionProfile, OverallWorking, Report, ReportDraft } from "@extlens/protocol";
-import type { ExtlensClient } from "../api.js";
+import type { ExtlensClient } from "@extlens/session";
 import type { ReportDraftForm } from "../types.js";
 import { buildReportRows } from "../components/report-form.js";
 
