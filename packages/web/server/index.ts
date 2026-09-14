@@ -90,7 +90,7 @@ async function main(): Promise<void> {
 
     const bridge = new Bridge({
         client: () => client,
-        ssh: { enabled: sshSpec !== null, manager: sshManager },
+        ssh: { enabled: sshSpec !== null, manager: () => sshManager },
         broadcast,
     });
 
@@ -163,6 +163,16 @@ async function main(): Promise<void> {
                 }
             })();
         });
+    });
+
+    // A port conflict is the most likely startup failure (a second copy of this server, or the
+    // ink client's dev port). Say so in one line instead of letting node throw a stack trace.
+    server.on("error", (error: NodeJS.ErrnoException) => {
+        if (error.code === "EADDRINUSE") {
+            process.stderr.write(`port ${port} is already in use — pass --port to pick another\n`);
+            process.exit(1);
+        }
+        throw error;
     });
 
     server.listen(port, "127.0.0.1", () => {

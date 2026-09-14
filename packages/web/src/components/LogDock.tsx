@@ -1,13 +1,17 @@
 /**
- * The host log, as a collapsible dock.
+ * The host log, as a bottom drawer.
  *
- * Collapsed by default and pinned to the bottom: during a batch migration it is the only thing
- * worth watching, and the rest of the time it is noise. It auto-scrolls only while pinned to the
- * end, so reading back through a failure is not fought by incoming lines.
+ * Collapsed by default: during a batch migration it is the only thing worth watching, and the
+ * rest of the time it is noise. It follows new lines only while scrolled to the end, so reading
+ * back through a failure is not fought by incoming output.
  */
-import React, { useEffect, useRef } from "react";
+import * as React from "react";
+import { useEffect, useRef } from "react";
 import type { HostStatus, LogLine } from "@extlens/protocol";
-import { Button } from "./primitives.js";
+import { ChevronDown, ChevronUp } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 export function LogDock({
     open,
@@ -22,7 +26,7 @@ export function LogDock({
     lines: LogLine[];
     error: string | null;
 }) {
-    const scroller = useRef<HTMLDivElement | null>(null);
+    const scroller = useRef<HTMLDivElement>(null);
     const pinned = useRef(true);
 
     useEffect(() => {
@@ -31,14 +35,15 @@ export function LogDock({
     }, [lines.length, open]);
 
     return (
-        <div className="border-t border-surface1 bg-mantle">
-            <div className="flex items-center justify-between px-4 py-1.5">
-                <div className="flex items-center gap-2">
-                    <Button onClick={onToggle}>{open ? "▾ host log" : "▸ host log"}</Button>
-                    {status?.phase ? <span className="text-overlay0">{status.phase}</span> : null}
-                    {error ? <span className="text-red">{error}</span> : null}
-                </div>
-                <span className="text-overlay0">{lines.length} lines</span>
+        <div className="shrink-0 border-t bg-card">
+            <div className="flex h-10 items-center gap-3 px-3">
+                <Button size="sm" variant="ghost" onClick={onToggle}>
+                    {open ? <ChevronDown className="size-4" /> : <ChevronUp className="size-4" />}
+                    Host log
+                </Button>
+                {status?.phase ? <Badge variant="outline">{status.phase}</Badge> : null}
+                {error ? <span className="text-sm text-destructive">{error}</span> : null}
+                <span className="ml-auto text-xs text-muted-foreground tabular-nums">{lines.length} lines</span>
             </div>
             {open ? (
                 <div
@@ -47,15 +52,18 @@ export function LogDock({
                         const el = e.currentTarget;
                         pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
                     }}
-                    className="h-56 overflow-auto border-t border-surface0 px-4 py-2 text-[12px] leading-5"
+                    className="h-56 overflow-auto border-t px-4 py-2 font-mono text-xs leading-5"
                 >
                     {lines.length === 0 ? (
-                        <div className="text-overlay0">{status?.message ?? "(no output from the host yet)"}</div>
+                        <p className="text-muted-foreground">{status?.message ?? "No output from the host yet."}</p>
                     ) : (
                         lines.map((line) => (
                             <div
                                 key={line.seq}
-                                className={`whitespace-pre-wrap break-all ${line.stream === "stderr" ? "text-red" : "text-subtext1"}`}
+                                className={cn(
+                                    "whitespace-pre-wrap break-all",
+                                    line.stream === "stderr" ? "text-destructive" : "text-foreground/80",
+                                )}
                             >
                                 {line.text}
                             </div>

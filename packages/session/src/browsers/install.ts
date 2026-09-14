@@ -9,7 +9,7 @@ import { spawn } from "node:child_process";
  * EXTLENS_BROWSER_DIR (default /tmp/extlens) so the analyzer can launch it.
  */
 
-export const BROWSER_DIR = process.env.EXLENS_BROWSER_DIR ?? "/tmp/extlens";
+export const BROWSER_DIR = process.env.EXTLENS_BROWSER_DIR ?? process.env.EXLENS_BROWSER_DIR ?? "/tmp/extlens";
 
 const KNOWN_GOOD_URL =
   "https://googlechromelabs.github.io/chrome-for-testing/known-good-versions-with-downloads.json";

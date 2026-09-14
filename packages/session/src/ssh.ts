@@ -70,13 +70,17 @@ export interface SshManager {
 export function parseSshSpec(argv: string[]): SshSpec | null {
   const flagIndex = argv.indexOf("--ssh");
   const flagValue = flagIndex !== -1 && argv[flagIndex + 1] ? argv[flagIndex + 1] : null;
-  const destination = flagValue ?? process.env.EXLENS_SSH ?? null;
+  // EXLENS_* (missing T) was the original spelling and is what every existing shell profile
+  // sets; EXTLENS_* is what the docs have always said. Both work, documented one wins.
+  const destination = flagValue ?? process.env.EXTLENS_SSH ?? process.env.EXLENS_SSH ?? null;
   if (!destination) return null;
 
   let remotePort = 8081;
   const portIndex = argv.indexOf("--remote-port");
   if (portIndex !== -1 && argv[portIndex + 1]) remotePort = Number(argv[portIndex + 1]);
-  else if (process.env.EXLENS_REMOTE_PORT) remotePort = Number(process.env.EXLENS_REMOTE_PORT);
+  else if (process.env.EXTLENS_REMOTE_PORT ?? process.env.EXLENS_REMOTE_PORT) {
+    remotePort = Number(process.env.EXTLENS_REMOTE_PORT ?? process.env.EXLENS_REMOTE_PORT);
+  }
   if (!Number.isInteger(remotePort) || remotePort < 1 || remotePort > 65535) {
     throw new Error(`invalid remote port: ${remotePort}`);
   }

@@ -50,7 +50,12 @@ export interface LocalSnapshot {
 
 export interface BridgeDeps {
     client: () => ExtlensClient | null;
-    ssh: { enabled: boolean; manager: SshManager | null };
+    /**
+     * The ssh manager is read through a function, not held as a value: it is created after the
+     * bridge (the tunnel needs somewhere to report status to), so capturing it at construction
+     * pinned it to null forever and every remote launch failed with "tunnel not up".
+     */
+    ssh: { enabled: boolean; manager: () => SshManager | null };
     /** Pushed to every connected tab whenever local state changes. */
     broadcast: (event: string, payload: unknown) => void;
 }
@@ -123,7 +128,7 @@ export class Bridge {
      */
     private async resolve(files: FileRefs, id?: string): Promise<FileRefs> {
         if (!this.deps.ssh.enabled) return files;
-        const session = this.deps.ssh.manager?.session;
+        const session = this.deps.ssh.manager()?.session;
         if (!session) throw new Error("tunnel not up");
         const resolved: FileRefs = {};
         for (const label of ["mv2", "mv3"] as const) {

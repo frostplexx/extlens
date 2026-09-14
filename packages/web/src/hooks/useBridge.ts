@@ -5,8 +5,8 @@
  * socket is created once for the page rather than once per component.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bridge, bridgeUrl, type BridgeStatus } from "../bridge.js";
-import type { LocalSnapshot, SessionState } from "../types.js";
+import { Bridge, bridgeUrl, type BridgeStatus } from "../bridge";
+import type { LocalSnapshot, SessionState } from "../types";
 
 const IDLE_LOCAL: LocalSnapshot = {
     browsers: {

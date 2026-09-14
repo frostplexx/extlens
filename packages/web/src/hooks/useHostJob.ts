@@ -8,7 +8,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { HostLogResult, HostStatus, LogLine } from "@extlens/protocol";
-import type { BridgeHandle } from "./useBridge.js";
+import type { BridgeHandle } from "./useBridge";
 
 const POLL_MS = 1500;
 

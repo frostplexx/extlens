@@ -13,7 +13,7 @@ import { parseSshSpec } from "@extlens/session";
 function resolveWsUrl(argv: string[]): string {
   const flagIndex = argv.indexOf("--ws");
   if (flagIndex !== -1 && argv[flagIndex + 1]) return argv[flagIndex + 1];
-  if (process.env.EXLENS_WS) return process.env.EXLENS_WS;
+  if (process.env.EXTLENS_WS ?? process.env.EXLENS_WS) return (process.env.EXTLENS_WS ?? process.env.EXLENS_WS) as string;
   return "ws://localhost:8081";
 }
 

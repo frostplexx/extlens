@@ -8,7 +8,7 @@ import { Bridge, refToPath } from "../server/bridge.js";
 
 function makeBridge() {
     const broadcast = vi.fn();
-    const bridge = new Bridge({ client: () => null, ssh: { enabled: false, manager: null }, broadcast });
+    const bridge = new Bridge({ client: () => null, ssh: { enabled: false, manager: () => null }, broadcast });
     return { bridge, broadcast };
 }
 
@@ -55,7 +55,7 @@ describe("local method routing", () => {
 
     it("refuses to resolve remote refs when the tunnel is down", async () => {
         const broadcast = vi.fn();
-        const bridge = new Bridge({ client: () => null, ssh: { enabled: true, manager: null }, broadcast });
+        const bridge = new Bridge({ client: () => null, ssh: { enabled: true, manager: () => null }, broadcast });
         // Silently launching the un-downloaded remote path would load the wrong thing, or nothing.
         await expect(bridge.handle("local.launch", { files: { mv2: "file:///remote/ext" } })).rejects.toThrow(
             /tunnel not up/,

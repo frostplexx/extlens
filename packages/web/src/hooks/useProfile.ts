@@ -6,7 +6,7 @@
  */
 import { useEffect, useState } from "react";
 import type { ExtensionProfile, FileRefs, Report } from "@extlens/protocol";
-import type { BridgeHandle } from "./useBridge.js";
+import type { BridgeHandle } from "./useBridge";
 
 export interface ProfileState {
     profile: ExtensionProfile | null;

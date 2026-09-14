@@ -7,7 +7,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ExtensionLight, ListResult, ListStats, SortOrder } from "@extlens/protocol";
-import type { BridgeHandle } from "./useBridge.js";
+import type { BridgeHandle } from "./useBridge";
 
 export const PAGE_SIZE = 100;
 

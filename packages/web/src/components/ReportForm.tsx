@@ -1,15 +1,21 @@
 /**
- * The manual verification form.
+ * The manual verification report.
  *
- * The rules are ExtPorter's and identical to the terminal client's — conditional rows follow the
- * manifest, and `overallWorking` is derived downward from the quick assessments — but the controls
- * are real ones. A checkbox that shows its state without a cursor is the single biggest
- * ergonomic win of a browser over a TUI here, because the reviewer is looking at Chrome, not at
- * this form, and glancing back should not require re-reading a list.
+ * The rules are ExtPorter's, identical to the terminal client's: the visible rows follow the
+ * manifest (never ask whether an options page works when there is none — "no" and "not
+ * applicable" must stay distinguishable in the data), and `overallWorking` is derived downward
+ * from the quick assessments rather than left to the reviewer.
  */
-import React, { useEffect, useMemo, useState } from "react";
+import * as React from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ExtensionProfile, OverallWorking, Report, ReportDraft } from "@extlens/protocol";
-import { Button } from "./primitives.js";
+import { Loader2, Save } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Mono } from "./shared";
 
 interface Flags {
     hasPopup: boolean;
@@ -38,7 +44,7 @@ interface Draft {
     listeners: ("untested" | "yes" | "no")[];
 }
 
-/** A failing quick assessment downgrades the overall verdict; "yes" must not survive it. */
+/** A failing quick assessment downgrades the overall verdict; "yes" must not survive one. */
 function downgrade(d: Draft, flags: Flags): OverallWorking {
     if (!d.installs) return "no";
     if (d.needsLogin) return "could_not_test";
@@ -65,8 +71,8 @@ export function ReportForm({
     const [startedAt, setStartedAt] = useState(() => Date.now());
     const [draft, setDraft] = useState<Draft>(() => initial(profile, saved));
 
-    // Switching extensions must reset the form and the verification clock, or the next
-    // extension inherits the previous one's answers and its elapsed time.
+    // A new extension resets the answers and the verification clock; inheriting the previous
+    // extension's form would quietly record the wrong thing.
     useEffect(() => {
         setDraft(initial(profile, saved));
         setStartedAt(Date.now());
@@ -102,89 +108,106 @@ export function ReportForm({
         });
 
     return (
-        <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-x-6 gap-y-1">
-                <Check label="installs" checked={draft.installs} onChange={(v) => set("installs", v)} />
-                <Check label="works in mv2" checked={draft.worksInMv2} onChange={(v) => set("worksInMv2", v)} />
-                <Check label="needs login" checked={draft.needsLogin} onChange={(v) => set("needsLogin", v)} />
-                <Check label="interesting" checked={draft.isInteresting} onChange={(v) => set("isInteresting", v)} />
+        <div className="space-y-5">
+            <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+                <Check id="installs" label="Installs" checked={draft.installs} onChange={(v) => set("installs", v)} />
+                <Check id="mv2" label="Works in MV2" checked={draft.worksInMv2} onChange={(v) => set("worksInMv2", v)} />
+                <Check id="login" label="Needs login" checked={draft.needsLogin} onChange={(v) => set("needsLogin", v)} />
+                <Check id="interesting" label="Interesting" checked={draft.isInteresting} onChange={(v) => set("isInteresting", v)} />
                 {flags.hasPopup ? (
-                    <Check label="popup works" checked={draft.isPopupWorking} onChange={(v) => set("isPopupWorking", v)} />
+                    <Check id="popup" label="Popup works" checked={draft.isPopupWorking} onChange={(v) => set("isPopupWorking", v)} />
                 ) : null}
                 {flags.hasSettings ? (
                     <Check
-                        label="options page works"
+                        id="options"
+                        label="Options page works"
                         checked={draft.isSettingsWorking}
                         onChange={(v) => set("isSettingsWorking", v)}
                     />
                 ) : null}
                 {flags.isNewTab ? (
-                    <Check label="new tab works" checked={draft.isNewTabWorking} onChange={(v) => set("isNewTabWorking", v)} />
+                    <Check id="newtab" label="New tab works" checked={draft.isNewTabWorking} onChange={(v) => set("isNewTabWorking", v)} />
                 ) : null}
             </div>
 
-            <label className="flex items-center gap-3">
-                <span className="w-36 text-subtext0">overall</span>
-                <select
+            <div className="flex items-center gap-3">
+                <Label htmlFor="overall" className="w-28 text-muted-foreground">
+                    Overall
+                </Label>
+                <Select
                     value={draft.overallWorking}
-                    onChange={(e) => setDraft((d) => ({ ...d, overallWorking: e.target.value as OverallWorking }))}
-                    className="rounded bg-surface0 px-2 py-1 text-text ring-1 ring-inset ring-surface1 focus:outline-none focus:ring-mauve"
+                    onValueChange={(value) => setDraft((d) => ({ ...d, overallWorking: value as OverallWorking }))}
                 >
-                    <option value="yes">yes</option>
-                    <option value="no">no</option>
-                    <option value="could_not_test">could not test</option>
-                </select>
-            </label>
+                    <SelectTrigger id="overall" className="w-56">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="yes">Working</SelectItem>
+                        <SelectItem value="no">Broken</SelectItem>
+                        <SelectItem value="could_not_test">Could not test</SelectItem>
+                    </SelectContent>
+                </Select>
+            </div>
 
             {profile.listeners.length > 0 ? (
-                <div>
-                    <div className="mb-1 text-subtext0">listeners</div>
-                    <div className="max-h-56 space-y-1 overflow-auto rounded border border-surface0 p-2">
+                <div className="space-y-2">
+                    <Label className="text-muted-foreground">Listeners</Label>
+                    <div className="max-h-64 space-y-1.5 overflow-auto rounded-md border p-2">
                         {profile.listeners.map((l, i) => (
                             <div key={`${l.api}:${l.file}:${l.line}`} className="flex items-center gap-2">
-                                <select
+                                <Select
                                     value={draft.listeners[i] ?? "untested"}
-                                    onChange={(e) =>
+                                    onValueChange={(value) =>
                                         setDraft((d) => {
                                             const next = [...d.listeners];
-                                            next[i] = e.target.value as "untested" | "yes" | "no";
+                                            next[i] = value as "untested" | "yes" | "no";
                                             return { ...d, listeners: next };
                                         })
                                     }
-                                    className="w-24 rounded bg-surface0 px-1.5 py-0.5 text-xs ring-1 ring-inset ring-surface1 focus:outline-none focus:ring-mauve"
                                 >
-                                    <option value="untested">untested</option>
-                                    <option value="yes">works</option>
-                                    <option value="no">broken</option>
-                                </select>
-                                <span className="truncate" title={`${l.api} — ${l.file}:${l.line}`}>
-                                    {l.api}
-                                    <span className="text-overlay0">
+                                    <SelectTrigger size="sm" className="w-28 shrink-0">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="untested">untested</SelectItem>
+                                        <SelectItem value="yes">works</SelectItem>
+                                        <SelectItem value="no">broken</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                <div className="min-w-0 truncate" title={`${l.api} — ${l.file}:${l.line}`}>
+                                    <Mono>{l.api}</Mono>
+                                    <Mono className="text-muted-foreground">
                                         {" "}
                                         {l.file}:{l.line}
-                                    </span>
-                                </span>
+                                    </Mono>
+                                </div>
                             </div>
                         ))}
                     </div>
                 </div>
             ) : null}
 
-            <textarea
-                value={draft.notes}
-                onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))}
-                placeholder="notes"
-                rows={3}
-                className="w-full resize-y rounded bg-surface0 px-2 py-1.5 text-text ring-1 ring-inset ring-surface1 placeholder:text-overlay0 focus:outline-none focus:ring-mauve"
-            />
+            <div className="space-y-2">
+                <Label htmlFor="notes" className="text-muted-foreground">
+                    Notes
+                </Label>
+                <Textarea
+                    id="notes"
+                    rows={3}
+                    value={draft.notes}
+                    onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))}
+                    placeholder="What broke, what you clicked, anything the next reader needs."
+                />
+            </div>
 
-            {error ? <div className="text-red">{error}</div> : null}
+            {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
-            <div className="flex items-center gap-2">
-                <Button tone="primary" onClick={submit} disabled={submitting}>
-                    {submitting ? "saving…" : saved ? "update report" : "save report"}
+            <div className="flex items-center gap-3">
+                <Button onClick={submit} disabled={submitting}>
+                    {submitting ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+                    {saved ? "Update report" : "Save report"}
                 </Button>
-                <span className="text-overlay0">
+                <span className="text-xs text-muted-foreground">
                     {Math.round((Date.now() - startedAt) / 1000)}s on this extension
                 </span>
             </div>
@@ -210,23 +233,22 @@ function initial(profile: ExtensionProfile, saved: Report | null): Draft {
 }
 
 function Check({
+    id,
     label,
     checked,
     onChange,
 }: {
+    id: string;
     label: string;
     checked: boolean;
     onChange: (value: boolean) => void;
 }) {
     return (
-        <label className="flex cursor-pointer items-center gap-2 py-0.5 select-none">
-            <input
-                type="checkbox"
-                checked={checked}
-                onChange={(e) => onChange(e.target.checked)}
-                className="h-3.5 w-3.5 accent-mauve"
-            />
-            <span>{label}</span>
-        </label>
+        <div className="flex items-center gap-2">
+            <Checkbox id={id} checked={checked} onCheckedChange={(value) => onChange(value === true)} />
+            <Label htmlFor={id} className="cursor-pointer font-normal">
+                {label}
+            </Label>
+        </div>
     );
 }

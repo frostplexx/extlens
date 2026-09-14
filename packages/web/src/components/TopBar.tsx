@@ -1,92 +1,80 @@
-/** Brand, search, sort, host controls and connection state — the app's one fixed row. */
-import React from "react";
-import type { HostStatus, ListStats, SortOrder } from "@extlens/protocol";
-import type { BridgeStatus } from "../bridge.js";
-import type { SessionState } from "../types.js";
-import { SORTS } from "../hooks/useExtensions.js";
-import { Button, Pill } from "./primitives.js";
+/**
+ * The application bar: identity, host controls, and the two connection states.
+ *
+ * Two links can fail independently — page↔server and server↔host — and which one is broken is the
+ * difference between "restart the server" and "start the host", so they are never collapsed into
+ * a single indicator.
+ */
+import * as React from "react";
+import type { HostStatus } from "@extlens/protocol";
+import { Play, Square, Terminal } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import type { BridgeStatus } from "../bridge";
+import type { SessionState } from "../types";
+import { cn } from "@/lib/utils";
 
 export function TopBar({
-    search,
-    onSearch,
-    sort,
-    onSort,
-    stats,
     status,
     session,
     host,
     onToggleHost,
-    searchRef,
 }: {
-    search: string;
-    onSearch: (value: string) => void;
-    sort: SortOrder;
-    onSort: (value: SortOrder) => void;
-    stats: ListStats | null;
     status: BridgeStatus;
     session: SessionState | null;
     host: { status: HostStatus | null; supported: boolean; running: boolean };
     onToggleHost: () => void;
-    searchRef: React.Ref<HTMLInputElement>;
 }) {
-    // Two connections can fail independently: the page↔server bridge, and the server↔host link.
-    // Showing whichever is broken is the difference between "restart the server" and "start the
-    // host", so they are never collapsed into one indicator.
-    const connection =
+    const link =
         status !== "open"
-            ? { tone: "bad" as const, label: `bridge ${status}` }
+            ? { dot: "bg-destructive", label: `bridge ${status}`, hint: "the local server is not reachable" }
             : session?.connection === "connected"
-              ? { tone: "good" as const, label: "connected" }
-              : { tone: "warn" as const, label: `host ${session?.connection ?? "…"}` };
+              ? { dot: "bg-green", label: "connected", hint: "connected to the extlens host" }
+              : {
+                    dot: "bg-peach",
+                    label: `host ${session?.connection ?? "…"}`,
+                    hint: session?.message ?? "the local server cannot reach the host",
+                };
 
     return (
-        <header className="flex items-center gap-4 border-b border-surface1 bg-mantle px-4 py-2">
-            <span className="font-semibold text-green">extlens</span>
+        <header className="flex h-14 shrink-0 items-center gap-4 border-b bg-card px-5">
+            <div className="flex items-center gap-2">
+                <Terminal className="size-4 text-primary" />
+                <span className="font-semibold tracking-tight">extlens</span>
+            </div>
 
-            <input
-                ref={searchRef}
-                value={search}
-                onChange={(e) => onSearch(e.target.value)}
-                placeholder="search by name…   (/)"
-                className="w-72 rounded bg-surface0 px-2 py-1 text-text ring-1 ring-inset ring-surface1 placeholder:text-overlay0 focus:outline-none focus:ring-mauve"
-            />
+            <Separator orientation="vertical" className="h-6" />
 
-            <select
-                value={sort}
-                onChange={(e) => onSort(e.target.value as SortOrder)}
-                className="rounded bg-surface0 px-2 py-1 text-text ring-1 ring-inset ring-surface1 focus:outline-none focus:ring-mauve"
-            >
-                {SORTS.map((s) => (
-                    <option key={s.value} value={s.value}>
-                        {s.label}
-                    </option>
-                ))}
-            </select>
-
-            {stats ? (
-                <div className="flex items-center gap-3 text-subtext0">
-                    <span>{stats.total} total</span>
-                    <span>{stats.withMv3} mv3</span>
-                    <span>avg {stats.avgScore.toFixed(1)}</span>
+            {host.supported ? (
+                <div className="flex items-center gap-3">
+                    <Button size="sm" variant={host.running ? "destructive" : "default"} onClick={onToggleHost}>
+                        {host.running ? <Square className="size-4" /> : <Play className="size-4" />}
+                        {host.running ? "Stop migration" : "Migrate all"}
+                    </Button>
+                    {host.running && host.status?.extensionId ? (
+                        <span className="text-sm text-peach">
+                            {host.status.extensionId}
+                            {host.status.phase ? (
+                                <span className="text-muted-foreground"> · {host.status.phase}</span>
+                            ) : null}
+                        </span>
+                    ) : null}
                 </div>
             ) : null}
 
             <div className="ml-auto flex items-center gap-3">
-                {host.supported ? (
-                    <>
-                        {host.status?.extensionId && host.running ? (
-                            <span className="text-peach">
-                                {host.status.extensionId}
-                                {host.status.phase ? ` (${host.status.phase})` : ""}
-                            </span>
-                        ) : null}
-                        <Button tone={host.running ? "danger" : "primary"} onClick={onToggleHost}>
-                            {host.running ? "stop" : "migrate all"}
-                        </Button>
-                    </>
-                ) : null}
-                <Pill tone={connection.tone}>{connection.label}</Pill>
-                {session?.ssh ? <Pill tone="info">ssh {session.ssh}</Pill> : null}
+                {session?.ssh ? <Badge variant="outline">ssh {session.ssh}</Badge> : null}
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <span className={cn("size-2 rounded-full", link.dot)} />
+                            {link.label}
+                        </div>
+                    </TooltipTrigger>
+                    <TooltipContent>{link.hint}</TooltipContent>
+                </Tooltip>
             </div>
         </header>
     );

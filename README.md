@@ -15,9 +15,9 @@ client touches host storage.
 - Ink client with two tabs: explorer (search, sort, pagination, score bars,
   tags) and analyzer (profile view, dual-browser launch via playwright, manual
   report form).
-- Web UI (`npm run web`): a local React/Tailwind page served by a node process
-  that keeps the browser launching. Dense sortable table, detail pane, real form
-  controls, collapsible host log.
+- Web UI (`npm run web`): a local React + Tailwind page (shadcn/ui components)
+  served by a node process that keeps the browser launching. Dense sortable
+  table, detail pane, real form controls, collapsible host log.
 - A real adapter: AgenticMigrator (`src/extlens/` in that repo) serves its
   `run/` outputs.
 - Folder mode: `extlens serve <folder>` ingests a plain directory of
@@ -107,8 +107,12 @@ for Testing and installs it under `EXTLENS_BROWSER_DIR`. MV2 gets Chrome 116
 ## Web UI
 
 ```sh
-npm run web          # build the page, serve it, print a tokenised localhost URL
+npm run web                              # build, serve, print a tokenised localhost URL
+npm run web -- --ssh daniel@10.0.0.5     # same, against a remote host
 ```
+
+Flags after `--` reach the server: `--ws`, `--ssh`, `--remote-port`, `--port`
+(default 8090).
 
 The printed URL includes a one-off token; the server binds `127.0.0.1` and
 rejects any bridge connection without it.
@@ -130,10 +134,9 @@ Browser state (launching, loaded, download progress) is pushed to every open tab
 rather than polled, because it changes on the server's schedule — a download
 progressing, or Chrome being closed by hand.
 
-Flags mirror the terminal client: `--ws`, `--ssh`, `--remote-port`, plus
-`--port` (default 8090) and `EXTLENS_WEB_TOKEN` to pin the token. With `--ssh`,
-the password prompt appears in the terminal running the server, before any tab
-connects.
+`EXTLENS_WEB_TOKEN` pins the token instead of generating one per run. With
+`--ssh`, the password prompt appears in the terminal running the server, before
+any tab connects.
 
 For UI development, `npm run web:dev` runs vite on :5173 with HMR; keep
 `npm run start --workspace packages/web` running alongside it for the bridge,
@@ -212,12 +215,19 @@ packages/web/server/bridge.ts  — local.* methods: browser launch/close, downlo
 packages/web/src/bridge.ts     — the page's socket: RPC promises + pushed events
 packages/web/src/hooks/*.ts    — useBridge, useExtensions, useProfile, useHostJob
 packages/web/src/components/*  — table, detail pane, report form, log dock (presentational)
+packages/web/src/components/ui — shadcn/ui components, generated; do not hand-edit
 ```
 
-The same rule as the TUI: hooks own behaviour, `App.tsx` is wiring. Colours come
-from `src/index.css` as Tailwind `@theme` tokens, using the same Catppuccin
-Mocha palette as `packages/client/src/theme.ts`, so the two front ends read as
-one tool.
+The same rule as the TUI: hooks own behaviour, `App.tsx` is wiring.
+
+Components come from shadcn/ui (`npx shadcn@latest add <name>`) and are left
+exactly as generated, so they can be regenerated or updated. Theming is the
+supported way — `src/index.css` maps shadcn's semantic tokens (`--background`,
+`--primary`, `--border`) onto the Catppuccin Mocha palette that
+`packages/client/src/theme.ts` uses, so the two front ends read as one tool
+without any component being forked. Anything that encodes something about
+*extensions* rather than about widgets (what a score colour means, what a
+browser phase looks like) lives in `components/shared.tsx`.
 
 ## Docs
 
