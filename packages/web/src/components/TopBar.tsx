@@ -105,7 +105,9 @@ export function TopBar({
                     {host.running && eta ? (
                         <div className="hidden min-w-44 flex-col gap-1 md:flex">
                             <div className="flex items-baseline justify-between gap-2 text-xs">
-                                <span className="tabular-nums text-peach">
+                                {/* Plain foreground: the count is a fact, not a warning. The bar
+                                    below carries the "something is running" colour. */}
+                                <span className="tabular-nums text-foreground">
                                     {host.status?.progress?.done ?? 0} / {host.status?.progress?.total ?? 0}
                                 </span>
                                 <span className="text-muted-foreground">
