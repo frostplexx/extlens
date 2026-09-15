@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./match-patterns": "./src/match-patterns.ts",
-    "./surfaces": "./src/surfaces.ts"
+    "./surfaces": "./src/surfaces.ts",
+    "./scoring": "./src/scoring.ts"
   },
   "devDependencies": {
     "typescript": "^5.7.2"

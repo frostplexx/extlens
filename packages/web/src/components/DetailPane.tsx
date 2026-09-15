@@ -12,12 +12,13 @@
 import * as React from "react";
 import type { ExtensionProfile, FileRefs, ManifestSummary, Report, ReportDraft, ScoreBreakdown } from "@extlens/protocol";
 import { Download, MonitorPlay, MousePointerSquareDashed, SquareX, TriangleAlert } from "lucide-react";
+import { WEIGHTS, type WeightKey } from "@extlens/analyzer/scoring";
 import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Item, ItemActions, ItemContent, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { Kbd } from "@/components/ui/kbd";
-import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -117,7 +118,7 @@ export function DetailPane({
 
     return (
         <div className="flex h-full min-h-0 flex-col">
-            <header className="shrink-0 space-y-3 p-5">
+            <header className="mx-auto w-full max-w-3xl shrink-0 space-y-3 p-5">
                 <div className="space-y-1">
                     <h2 className="truncate text-lg font-semibold leading-tight" title={profile.name}>
                         {profile.name}
@@ -160,14 +161,19 @@ export function DetailPane({
             <Separator />
 
             <Tabs defaultValue="report" className="flex min-h-0 flex-1 flex-col gap-0">
-                <TabsList className="mx-5 mt-4 self-start">
+                <div className="mx-auto w-full max-w-3xl px-5">
+                <TabsList className="mt-4">
                     <TabsTrigger value="report">Report</TabsTrigger>
                     <TabsTrigger value="profile">Profile</TabsTrigger>
                     <TabsTrigger value="manifest">Manifest</TabsTrigger>
                     <TabsTrigger value="listeners">Listeners ({profile.listeners.length})</TabsTrigger>
                 </TabsList>
+                </div>
 
-                <div className="min-h-0 flex-1 overflow-auto p-5">
+                {/* The scroller stays full width so the scrollbar sits at the pane edge; the column
+                    inside it is what is centred. */}
+                <div className="min-h-0 flex-1 overflow-auto">
+                    <div className="mx-auto w-full max-w-3xl p-5">
                     <TabsContent value="report" className="mt-0">
                         <ReportForm
                             profile={profile}
@@ -228,6 +234,7 @@ export function DetailPane({
                             </ul>
                         )}
                     </TabsContent>
+                    </div>
                 </div>
             </Tabs>
         </div>
@@ -315,23 +322,64 @@ function BrowserControls({
     );
 }
 
+/**
+ * What the score is made of.
+ *
+ * Was a row of bars scaled to the largest raw count, which compared quantities sharing no unit —
+ * HTML lines against crypto patterns against 100KB units — so the longest bar only ever meant
+ * "this dimension happens to be counted in small things". The score is a weighted sum, so the
+ * number that explains it is count × weight, and the useful ordering is by that contribution.
+ */
 function Breakdown({ breakdown }: { breakdown: ScoreBreakdown }) {
-    const entries = BREAKDOWN_LABELS.filter(([key]) => breakdown[key] > 0);
-    if (entries.length === 0) return <p className="text-sm text-muted-foreground">Nothing scored.</p>;
-    const max = Math.max(...entries.map(([key]) => breakdown[key]), 1);
+    const rows = BREAKDOWN_LABELS.filter(([key]) => breakdown[key] > 0)
+        .map(([key, label]) => ({
+            key,
+            label,
+            count: breakdown[key],
+            weight: WEIGHTS[key as WeightKey],
+            points: breakdown[key] * WEIGHTS[key as WeightKey],
+        }))
+        .sort((a, b) => b.points - a.points);
+
+    if (rows.length === 0) return <p className="text-sm text-muted-foreground">Nothing scored.</p>;
+    const total = rows.reduce((sum, r) => sum + r.points, 0);
+
     return (
-        <div className="space-y-2">
-            {entries.map(([key, label]) => (
-                <div key={key} className="flex items-center gap-3 text-sm">
-                    <span className="w-48 shrink-0 text-muted-foreground">{label}</span>
-                    <span className="w-8 shrink-0 text-right tabular-nums text-blue">{breakdown[key]}</span>
-                    <Progress
-                        value={(breakdown[key] / max) * 100}
-                        className="max-w-32 [&_[data-slot=progress-indicator]]:bg-blue"
-                    />
-                </div>
-            ))}
-        </div>
+        <Table>
+            <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                    <TableHead>Dimension</TableHead>
+                    <TableHead className="text-right">Count</TableHead>
+                    <TableHead className="text-right">Weight</TableHead>
+                    <TableHead className="text-right">Points</TableHead>
+                    <TableHead className="w-16 text-right">Share</TableHead>
+                </TableRow>
+            </TableHeader>
+            <TableBody>
+                {rows.map((row) => (
+                    <TableRow key={row.key} className="hover:bg-transparent">
+                        <TableCell className="text-muted-foreground">{row.label}</TableCell>
+                        <TableCell className="text-right tabular-nums">{row.count.toLocaleString()}</TableCell>
+                        <TableCell className="text-right tabular-nums text-muted-foreground">×{row.weight}</TableCell>
+                        <TableCell className="text-right tabular-nums text-blue">
+                            {Math.round(row.points).toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums text-muted-foreground">
+                            {Math.round((row.points / total) * 100)}%
+                        </TableCell>
+                    </TableRow>
+                ))}
+            </TableBody>
+            <TableFooter>
+                <TableRow className="hover:bg-transparent">
+                    <TableCell colSpan={3}>Score</TableCell>
+                    <TableCell className="text-right font-medium tabular-nums">
+                        {Math.round(total).toLocaleString()}
+                    </TableCell>
+                    <TableCell />
+                </TableRow>
+            </TableFooter>
+        </Table>
     );
 }
 
