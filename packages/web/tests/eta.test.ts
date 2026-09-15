@@ -51,3 +51,34 @@ describe("durations read at a glance", () => {
         expect(formatDuration(195 * 60_000)).toBe("3h 15m");
     });
 });
+
+describe("counting down rather than drifting up", () => {
+    const batch = "2026-09-15T12:00:00.000Z";
+    const t = (minutes: number) => Date.parse(batch) + minutes * 60_000;
+    const iso = (minutes: number) => new Date(t(minutes)).toISOString();
+
+    it("charges the running extension's time to itself, not to the rate", () => {
+        // 2 done in the 40 minutes before the current one started = 20m each. 8 left = 160m,
+        // minus the 5m already spent on the one running.
+        const eta = estimate({ done: 2, total: 10, startedAt: batch }, t(45), iso(40));
+        expect(eta?.perItem).toBe("20m");
+        expect(eta?.remaining).toBe("2h 35m");
+    });
+
+    it("falls as time passes within one extension", () => {
+        const progress = { done: 2, total: 10, startedAt: batch };
+        const early = estimate(progress, t(41), iso(40))?.remaining;
+        const later = estimate(progress, t(55), iso(40))?.remaining;
+        // The bug: this used to grow, because the running item's time inflated the mean.
+        expect(early).toBe("2h 39m");
+        expect(later).toBe("2h 25m");
+    });
+
+    it("never goes negative when an extension runs long", () => {
+        expect(estimate({ done: 9, total: 10, startedAt: batch }, t(500), iso(90))?.remaining).toBe("0s");
+    });
+
+    it("still estimates, drifting, when the host reports no item start", () => {
+        expect(estimate({ done: 2, total: 10, startedAt: batch }, t(40))?.remaining).toBe("2h 40m");
+    });
+});

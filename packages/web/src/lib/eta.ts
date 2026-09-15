@@ -9,6 +9,13 @@
  *
  * It refuses to guess from a single sample. One finished extension says almost nothing about the
  * next forty, and a confident wrong ETA is worse than none.
+ *
+ * It also has to count DOWN. The obvious formula — total elapsed over finished items — drifts
+ * upward between completions, because the numerator keeps growing while the denominator does not:
+ * time spent on the extension currently running gets charged to the ones already done. Watching an
+ * estimate climb for forty minutes and then jump back is worse than useless, so the rate is taken
+ * from finished work only (batch start to current item start) and the time already spent on the
+ * running item is subtracted from what remains.
  */
 const MIN_SAMPLES = 2;
 
@@ -34,20 +41,29 @@ export function formatDuration(ms: number): string {
 export function estimate(
     progress: { done: number; total: number; startedAt: string | null } | null | undefined,
     now = Date.now(),
+    /** When the extension currently running began, so its elapsed time is not charged to the rate. */
+    currentStartedAt?: string | null,
 ): Eta | null {
     if (!progress || progress.total <= 0) return null;
     const fraction = Math.min(1, progress.done / progress.total);
 
-    const started = progress.startedAt ? Date.parse(progress.startedAt) : NaN;
-    if (!Number.isFinite(started) || progress.done < MIN_SAMPLES) {
+    const batchStart = progress.startedAt ? Date.parse(progress.startedAt) : NaN;
+    if (!Number.isFinite(batchStart) || progress.done < MIN_SAMPLES) {
         return { fraction, remaining: null, perItem: null };
     }
 
-    const perItemMs = (now - started) / progress.done;
+    const itemStart = currentStartedAt ? Date.parse(currentStartedAt) : NaN;
+    const haveItemStart = Number.isFinite(itemStart) && itemStart >= batchStart;
+
+    // Finished work only. Without an item start we fall back to total elapsed, which is the drifting
+    // version — still better than nothing, and it stops drifting the moment the host reports one.
+    const finishedMs = haveItemStart ? itemStart - batchStart : now - batchStart;
+    const perItemMs = finishedMs / progress.done;
+
     const left = progress.total - progress.done;
-    return {
-        fraction,
-        remaining: left > 0 ? formatDuration(perItemMs * left) : null,
-        perItem: formatDuration(perItemMs),
-    };
+    if (left <= 0) return { fraction, remaining: null, perItem: formatDuration(perItemMs) };
+
+    const spentOnCurrent = haveItemStart ? now - itemStart : 0;
+    const remainingMs = Math.max(0, perItemMs * left - spentOnCurrent);
+    return { fraction, remaining: formatDuration(remainingMs), perItem: formatDuration(perItemMs) };
 }

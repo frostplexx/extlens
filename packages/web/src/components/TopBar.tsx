@@ -38,7 +38,9 @@ export function TopBar({
     exporting: boolean;
 }) {
     // Recomputed each render so the estimate tracks the poll rather than freezing at its first value.
-    const eta = estimate(host.status?.progress, Date.now());
+    // status.startedAt is the CURRENT extension's start; progress.startedAt is the batch's. The
+    // difference between them is what lets the estimate count down instead of drifting up.
+    const eta = estimate(host.status?.progress, Date.now(), host.status?.startedAt);
 
     const link =
         status !== "open"
