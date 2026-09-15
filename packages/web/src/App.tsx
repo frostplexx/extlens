@@ -199,26 +199,14 @@ export function App() {
 
     const empty = list.rows.length === 0 && !list.loading;
 
-    return (
-        <TooltipProvider delayDuration={300}>
-            <div className="flex h-full flex-col bg-background text-foreground">
-                <TopBar
-                    status={bridge.status}
-                    session={bridge.session}
-                    host={{
-                        status: host.status,
-                        supported: host.supported,
-                        running: host.running,
-                        model: host.status?.model ?? null,
-                    }}
-                    onToggleHost={host.toggle}
-                    mode={mode}
-                    onModeChange={setMode}
-                    onExport={exportReports}
-                    exporting={exporting}
-                />
-
-                {mode === "review" ? (
+    /**
+     * The working area: the review pass, or the browse table and its detail pane.
+     *
+     * Held as a value because the log dock changes the shape of the frame around it — open, it
+     * shares a resizable split; closed, it is a fixed bar underneath — and the body itself does
+     * not care which.
+     */
+    const body = mode === "review" ? (
                     <ReviewView
                         queue={queue}
                         profile={profile.profile}
@@ -334,15 +322,56 @@ export function App() {
                         </aside>
                     </ResizablePanel>
                 </ResizablePanelGroup>
-                )}
+                );
 
-                <LogDock
-                    open={logOpen}
-                    onOpenChange={setLogOpen}
-                    status={host.status}
-                    lines={host.logs}
-                    error={host.error}
+    return (
+        <TooltipProvider delayDuration={300}>
+            <div className="flex h-full flex-col bg-background text-foreground">
+                <TopBar
+                    status={bridge.status}
+                    session={bridge.session}
+                    host={{
+                        status: host.status,
+                        supported: host.supported,
+                        running: host.running,
+                        model: host.status?.model ?? null,
+                    }}
+                    onToggleHost={host.toggle}
+                    mode={mode}
+                    onModeChange={setMode}
+                    onExport={exportReports}
+                    exporting={exporting}
                 />
+
+                {logOpen ? (
+                    <ResizablePanelGroup orientation="vertical" className="min-h-0 flex-1">
+                        <ResizablePanel defaultSize={70} minSize={25} className="flex min-h-0 flex-col">
+                            {body}
+                        </ResizablePanel>
+                        {/* The drag target IS the top edge of the log bar. */}
+                        <ResizableHandle withHandle />
+                        <ResizablePanel defaultSize={30} minSize={10} maxSize={80} className="flex min-h-0 flex-col">
+                            <LogDock
+                                open
+                                onOpenChange={setLogOpen}
+                                status={host.status}
+                                lines={host.logs}
+                                error={host.error}
+                            />
+                        </ResizablePanel>
+                    </ResizablePanelGroup>
+                ) : (
+                    <>
+                        <div className="flex min-h-0 flex-1 flex-col">{body}</div>
+                        <LogDock
+                            open={false}
+                            onOpenChange={setLogOpen}
+                            status={host.status}
+                            lines={host.logs}
+                            error={host.error}
+                        />
+                    </>
+                )}
 
                 <Toaster theme="dark" position="bottom-right" />
             </div>
