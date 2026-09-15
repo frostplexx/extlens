@@ -144,7 +144,10 @@ export function DetailPane({
                 {profile.manifest.description ? (
                     <p className="text-sm leading-snug text-muted-foreground">{profile.manifest.description}</p>
                 ) : null}
-                <ScoreBar score={profile.score} className="max-w-56" />
+                <div className="flex items-baseline gap-2">
+                    <ScoreBar score={profile.score} />
+                    <span className="text-xs text-muted-foreground">interestingness</span>
+                </div>
             </header>
 
             <Separator />

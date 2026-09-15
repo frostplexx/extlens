@@ -66,7 +66,7 @@ export function ExtensionTable({
                 id: "score",
                 accessorKey: "score",
                 header: "Score",
-                size: 150,
+                size: 90,
                 cell: ({ row }) => <ScoreBar score={row.original.score} />,
             },
             {

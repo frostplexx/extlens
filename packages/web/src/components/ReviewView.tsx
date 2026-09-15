@@ -267,7 +267,7 @@ function Subject({ profile, report }: { profile: ExtensionProfile; report: Repor
                 <Badge variant={profile.manifestVersion === 3 ? "default" : "secondary"} className="shrink-0 lg:hidden">
                     MV{profile.manifestVersion}
                 </Badge>
-                <ScoreBar score={profile.score} className="ml-auto w-24 shrink-0 lg:hidden" />
+                <ScoreBar score={profile.score} className="ml-auto shrink-0 lg:hidden" />
             </div>
 
             <div className="px-4 pb-4 lg:px-0 lg:pb-0">
@@ -287,7 +287,10 @@ function Subject({ profile, report }: { profile: ExtensionProfile; report: Repor
                     {profile.manifest.description}
                 </p>
             ) : null}
-            <ScoreBar score={profile.score} className="mt-3 hidden max-w-48 lg:flex" />
+            <div className="mt-3 hidden items-baseline gap-2 lg:flex">
+                <ScoreBar score={profile.score} />
+                <span className="text-xs text-muted-foreground">interestingness</span>
+            </div>
 
             {/* Tags and manifest facts are reference, not action: worth a column when there is one,
                 and worth folding away when the window is sharing the screen with two browsers. */}

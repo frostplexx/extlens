@@ -7,30 +7,25 @@
  */
 import * as React from "react";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 
-/** Score → colour. The same thresholds as the terminal client, so the two agree at a glance. */
-export function scoreTone(score: number): { text: string; indicator: string } {
-    if (score >= 70) return { text: "text-green", indicator: "[&_[data-slot=progress-indicator]]:bg-green" };
-    if (score >= 40) return { text: "text-yellow", indicator: "[&_[data-slot=progress-indicator]]:bg-yellow" };
-    return { text: "text-red", indicator: "[&_[data-slot=progress-indicator]]:bg-red" };
-}
-
 /**
- * A score as a number plus a bar.
+ * A score, as a number.
  *
- * The bar is `Progress` recoloured through its data-slot rather than a hand-rolled div, so the
- * component stays stock and still carries its ARIA role — the number alone is the accessible
- * value, but the bar is what makes a column of scores scannable.
+ * It used to come with a bar and a colour, and both lied. The bar was a `Progress` fed the raw
+ * score, which clamps at 100 — and interestingness is an unbounded weighted sum that reaches the
+ * thousands, so every bar in a list was full-length regardless of value. The colour came from
+ * thresholds at 70 and 40, which on that scale means everything is green.
+ *
+ * A number that is right beats a graphic that is wrong. Making the magnitude scannable again needs
+ * a range to scale against — the corpus maximum, or a percentile — which the client does not have
+ * today; until it does, this says exactly what it knows.
  */
 export function ScoreBar({ score, className }: { score: number; className?: string }) {
-    const tone = scoreTone(score);
     return (
-        <div className={cn("flex items-center gap-2", className)}>
-            <span className={cn("w-7 text-right text-sm font-semibold tabular-nums", tone.text)}>{score}</span>
-            <Progress value={score} className={cn("w-full max-w-20", tone.indicator)} />
-        </div>
+        <span className={cn("text-sm font-semibold tabular-nums text-foreground", className)}>
+            {score.toLocaleString()}
+        </span>
     );
 }
 
