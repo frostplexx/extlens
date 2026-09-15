@@ -343,44 +343,16 @@ export function App() {
                     exporting={exporting}
                 />
 
-                {logOpen ? (
-                    <ResizablePanelGroup orientation="vertical" className="min-h-0 flex-1">
-                        {/*
-                          * h-full on every wrapper, deliberately.
-                          *
-                          * The library applies `className` to a div NESTED inside the panel, not to
-                          * the panel itself — so without an explicit height that div is sized by its
-                          * content and simply ignores the panel growing around it. Dragging then
-                          * appears to work in one direction only: shrinking squeezes the content,
-                          * growing just adds empty space below it.
-                          */}
-                        <ResizablePanel defaultSize={70} minSize={20} className="flex h-full min-h-0 flex-col overflow-hidden">
-                            {body}
-                        </ResizablePanel>
-                        {/* The drag target IS the top edge of the log bar. */}
-                        <ResizableHandle withHandle />
-                        <ResizablePanel defaultSize={30} minSize={10} maxSize={85} className="flex h-full min-h-0 flex-col overflow-hidden">
-                            <LogDock
-                                open
-                                onOpenChange={setLogOpen}
-                                status={host.status}
-                                lines={host.logs}
-                                error={host.error}
-                            />
-                        </ResizablePanel>
-                    </ResizablePanelGroup>
-                ) : (
-                    <>
-                        <div className="flex min-h-0 flex-1 flex-col">{body}</div>
-                        <LogDock
-                            open={false}
-                            onOpenChange={setLogOpen}
-                            status={host.status}
-                            lines={host.logs}
-                            error={host.error}
-                        />
-                    </>
-                )}
+                <div className="flex min-h-0 flex-1 flex-col">{body}</div>
+
+                {/* Sizes itself; see LogDock for why that is not a panel group. */}
+                <LogDock
+                    open={logOpen}
+                    onOpenChange={setLogOpen}
+                    status={host.status}
+                    lines={host.logs}
+                    error={host.error}
+                />
 
                 <Toaster theme="dark" position="bottom-right" />
             </div>
