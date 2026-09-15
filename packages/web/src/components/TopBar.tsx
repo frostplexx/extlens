@@ -8,6 +8,8 @@
 import * as React from "react";
 import type { HostStatus } from "@extlens/protocol";
 import { ClipboardCheck, Cpu, Download, Play, Square, Table2, Terminal } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { estimate } from "@/lib/eta";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -35,6 +37,9 @@ export function TopBar({
     onExport: () => void;
     exporting: boolean;
 }) {
+    // Recomputed each render so the estimate tracks the poll rather than freezing at its first value.
+    const eta = estimate(host.status?.progress, Date.now());
+
     const link =
         status !== "open"
             ? { dot: "bg-destructive", label: `bridge ${status}`, hint: "the local server is not reachable" }
@@ -47,7 +52,13 @@ export function TopBar({
                 };
 
     return (
-        <header className="flex h-14 shrink-0 items-center gap-2 border-b bg-card px-3 lg:gap-4 lg:px-5">
+        /*
+         * Three bands: identity and host controls left, the mode switch centred, status right.
+         * The switch is centred absolutely rather than by flex order, so it stays put as the left
+         * and right bands change width — a control that moves when a migration starts is a control
+         * you have to look for.
+         */
+        <header className="relative flex h-14 shrink-0 items-center gap-2 border-b bg-card px-3 lg:gap-4 lg:px-5">
             <div className="flex items-center gap-2">
                 <Terminal className="size-4 text-primary" />
                 <span className="hidden font-semibold tracking-tight lg:inline">extlens</span>
@@ -55,9 +66,7 @@ export function TopBar({
 
             <Separator orientation="vertical" className="h-6" />
 
-            {/* Browse and review are different jobs over the same corpus, not two views of one
-                screen, so the switch between them is the first control in the bar. */}
-            <div className="flex shrink-0 items-center gap-1 rounded-md bg-secondary/60 p-0.5">
+            <div className="pointer-events-none absolute left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-md bg-secondary/60 p-0.5 [&>*]:pointer-events-auto">
                 <Button
                     size="sm"
                     variant={mode === "browse" ? "secondary" : "ghost"}
@@ -86,13 +95,28 @@ export function TopBar({
                         {host.running ? <Square className="size-4" /> : <Play className="size-4" />}
                         {host.running ? "Stop migration" : "Migrate all"}
                     </Button>
-                    {host.running && host.status?.extensionId ? (
-                        <span className="hidden truncate text-sm text-peach lg:inline">
-                            {host.status.extensionId}
-                            {host.status.phase ? (
-                                <span className="text-muted-foreground"> · {host.status.phase}</span>
-                            ) : null}
-                        </span>
+                    {/*
+                      * Where the batch is, not which extension it happens to be on.
+                      *
+                      * The id is 32 random characters and the phase changes every few minutes;
+                      * neither answers the question someone glancing at a day-long run is asking,
+                      * which is how much is left. The log dock still has the detail.
+                      */}
+                    {host.running && eta ? (
+                        <div className="hidden min-w-44 flex-col gap-1 md:flex">
+                            <div className="flex items-baseline justify-between gap-2 text-xs">
+                                <span className="tabular-nums text-peach">
+                                    {host.status?.progress?.done ?? 0} / {host.status?.progress?.total ?? 0}
+                                </span>
+                                <span className="text-muted-foreground">
+                                    {eta.remaining ? `~${eta.remaining} left` : "estimating…"}
+                                </span>
+                            </div>
+                            <Progress
+                                value={eta.fraction * 100}
+                                className="[&_[data-slot=progress-indicator]]:bg-peach"
+                            />
+                        </div>
                     ) : null}
                 </div>
             ) : null}

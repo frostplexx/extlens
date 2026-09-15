@@ -352,6 +352,22 @@ export const HostStatusSchema = z.object({
    * cannot name its model is not a result.
    */
   model: z.string().nullable().optional(),
+  /**
+   * Position in a batch, when one is running.
+   *
+   * A migration takes tens of minutes per extension, so "running" on its own tells the watcher
+   * nothing they did not already know. How far through, and how much longer, is the actual
+   * question — and only the host can answer the first half of it.
+   */
+  progress: z
+    .object({
+      done: z.number().int().nonnegative(),
+      total: z.number().int().nonnegative(),
+      /** ISO timestamp the batch began, so a client can derive a rate and an ETA. */
+      startedAt: z.string().nullable(),
+    })
+    .nullable()
+    .optional(),
 });
 
 /** Which extension to start a host job (migration) for. */
