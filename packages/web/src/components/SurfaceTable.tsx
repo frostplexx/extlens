@@ -38,6 +38,7 @@ export function SurfaceTable({
     contentScriptMatches = [],
     onOpenUrl,
     listeners = [],
+    readOnly = false,
 }: {
     detected: DetectedSurface[];
     results: SurfaceResult[];
@@ -45,6 +46,8 @@ export function SurfaceTable({
     /** Match patterns from the manifest, turned into pages the reviewer can open. */
     contentScriptMatches?: string[];
     onOpenUrl?: (url: string) => void;
+    /** Show what was recorded without offering to change it. */
+    readOnly?: boolean;
     /** Detected listeners, shown under the surface each one exercises. */
     listeners?: { api: string; file: string; line: number | null; kind?: "listener" | "call" }[];
 }) {
@@ -123,12 +126,18 @@ export function SurfaceTable({
                                                 type="button"
                                                 aria-label={`${SURFACE_LABELS[surface]}: ${label}`}
                                                 aria-pressed={status === value}
+                                                disabled={readOnly}
                                                 onClick={() => onChange(surface, { status: value })}
                                                 className={cn(
                                                     "flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors",
                                                     status === value
                                                         ? `border-current bg-secondary ${tone}`
-                                                        : "border-transparent text-muted-foreground hover:bg-secondary/60",
+                                                        : "border-transparent text-muted-foreground",
+                                                    // Read-only keeps the chosen state legible and drops the
+                                                    // affordances: no hover, no pointer, nothing to click at.
+                                                    readOnly
+                                                        ? status !== value && "opacity-40"
+                                                        : status !== value && "hover:bg-secondary/60",
                                                 )}
                                             >
                                                 <Icon className="size-4 shrink-0" />
@@ -145,12 +154,16 @@ export function SurfaceTable({
                         {/* A note is only worth asking for once something is wrong: that is when
                             the reason stops being recoverable from the status alone. */}
                         {status === "broken" || status === "partial" || status === "not_testable" ? (
-                            <Input
-                                value={result?.note ?? ""}
-                                onChange={(e) => onChange(surface, { note: e.target.value })}
-                                placeholder={status === "not_testable" ? "Why can't it be tested?" : "What was wrong?"}
-                                className="h-8"
-                            />
+                            readOnly ? (
+                                result?.note ? <p className="text-xs text-muted-foreground">{result.note}</p> : null
+                            ) : (
+                                <Input
+                                    value={result?.note ?? ""}
+                                    onChange={(e) => onChange(surface, { note: e.target.value })}
+                                    placeholder={status === "not_testable" ? "Why can't it be tested?" : "What was wrong?"}
+                                    className="h-8"
+                                />
+                            )
                         ) : null}
                     </div>
                 );

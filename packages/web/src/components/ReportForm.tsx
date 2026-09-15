@@ -17,7 +17,7 @@ import type {
     UiSurface,
 } from "@extlens/protocol";
 import { scoreSurfaces, VERDICT_LABELS, verdictFor } from "@extlens/protocol";
-import { Save } from "lucide-react";
+import { Pencil, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle } from "@/components/ui/item";
 import { Switch } from "@/components/ui/switch";
@@ -104,6 +104,8 @@ export function ReportForm({
     submitLabel,
     footer,
     onOpenUrl,
+    readOnly = false,
+    onRequestEdit,
 }: {
     profile: ExtensionProfile;
     saved: Report | null;
@@ -116,10 +118,20 @@ export function ReportForm({
     footer?: React.ReactNode;
     /** Open a page in the running test browsers; omitted where that is not wired up. */
     onOpenUrl?: (url: string) => void;
+    /**
+     * Show what was recorded without offering to change it.
+     *
+     * Browsing is looking, not reviewing. An editable form on every click invites an accidental
+     * edit to someone else's report, and — worse — the verification clock used to start the moment
+     * an extension was opened, so merely reading the data recorded time as if it were testing.
+     */
+    readOnly?: boolean;
+    onRequestEdit?: () => void;
 }) {
     const flags = useMemo(() => flagsOf(profile), [profile]);
     const detected = useMemo(() => surfacesToAsk(profile), [profile]);
-    const [startedAt, setStartedAt] = useState(() => Date.now());
+    // Null until the reviewer actually starts: time spent reading is not time spent verifying.
+    const [startedAt, setStartedAt] = useState<number | null>(() => (readOnly ? null : Date.now()));
     const [draft, setDraft] = useState<Draft>(() => initial(profile, saved));
     /**
      * Statuses as they were before "does not install" / "needs an account" overwrote them, so a
@@ -132,11 +144,11 @@ export function ReportForm({
     // extension's form would quietly record the wrong thing.
     useEffect(() => {
         setDraft(initial(profile, saved));
-        setStartedAt(Date.now());
+        setStartedAt(readOnly ? null : Date.now());
         // A snapshot belongs to the extension it was taken from; carrying it across would restore
         // one extension's judgements onto another's form.
         snapshot.current = null;
-    }, [profile.id, saved]);
+    }, [profile.id, saved, readOnly]);
 
     const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
         setDraft((d) => {
@@ -164,7 +176,7 @@ export function ReportForm({
         onSubmit({
             extensionId: profile.id,
             tested: true,
-            verificationDurationSecs: (Date.now() - startedAt) / 1000,
+            verificationDurationSecs: startedAt === null ? null : (Date.now() - startedAt) / 1000,
             installs: draft.installs,
             worksInMv2: draft.worksInMv2,
             needsLogin: draft.needsLogin,
@@ -201,6 +213,7 @@ export function ReportForm({
                         hint="Chrome accepted it. If not, nothing below is testable."
                         checked={draft.installs}
                         onChange={(v) => set("installs", v)}
+                        readOnly={readOnly}
                     />
                     <Toggle
                         id="mv2"
@@ -208,6 +221,7 @@ export function ReportForm({
                         hint="The original worked. If it did not, a failure here says nothing about the migration."
                         checked={draft.worksInMv2}
                         onChange={(v) => set("worksInMv2", v)}
+                        readOnly={readOnly}
                     />
                     <Toggle
                         id="login"
@@ -215,6 +229,7 @@ export function ReportForm({
                         hint="Needs a login, a device or a paid service before it can be exercised."
                         checked={draft.needsLogin}
                         onChange={(v) => set("needsLogin", v)}
+                        readOnly={readOnly}
                     />
                     <Toggle
                         id="interesting"
@@ -222,6 +237,7 @@ export function ReportForm({
                         hint="Worth coming back to: an unusual failure, or a hard migration done well."
                         checked={draft.isInteresting}
                         onChange={(v) => set("isInteresting", v)}
+                        readOnly={readOnly}
                     />
                 </ItemGroup>
             </FieldSet>
@@ -247,6 +263,7 @@ export function ReportForm({
                     )}
                 </FieldDescription>
                 <SurfaceTable
+                    readOnly={readOnly}
                     detected={detected}
                     contentScriptMatches={(profile.manifest.contentScripts ?? []).flatMap((cs) => cs.matches)}
                     onOpenUrl={onOpenUrl}
@@ -281,24 +298,44 @@ export function ReportForm({
 
             <Field>
                 <FieldLabel htmlFor="notes">Notes</FieldLabel>
-                <Textarea
-                    id="notes"
-                    rows={3}
-                    value={draft.notes}
-                    onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))}
-                    placeholder="What broke, what you clicked, anything the next reader needs."
-                />
+                {readOnly ? (
+                    <p className="text-sm text-muted-foreground">{draft.notes || "—"}</p>
+                ) : (
+                    <Textarea
+                        id="notes"
+                        rows={3}
+                        value={draft.notes}
+                        onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))}
+                        placeholder="What broke, what you clicked, anything the next reader needs."
+                    />
+                )}
             </Field>
 
             {error ? <FieldError>{error}</FieldError> : null}
 
             <Field orientation="horizontal">
-                <Button onClick={submit} disabled={submitting}>
-                    {submitting ? <Spinner /> : <Save className="size-4" />}
-                    {submitLabel ?? (saved ? "Update report" : "Save report")}
-                </Button>
-                {footer}
-                <FieldDescription>{Math.round((Date.now() - startedAt) / 1000)}s on this extension</FieldDescription>
+                {readOnly ? (
+                    <>
+                        <Button variant="outline" onClick={onRequestEdit} disabled={!onRequestEdit}>
+                            <Pencil className="size-4" />
+                            {saved ? "Edit report" : "Start a report"}
+                        </Button>
+                        <FieldDescription>
+                            {saved ? "Recorded earlier. Editing starts a fresh timing." : "Nothing recorded yet."}
+                        </FieldDescription>
+                    </>
+                ) : (
+                    <>
+                        <Button onClick={submit} disabled={submitting}>
+                            {submitting ? <Spinner /> : <Save className="size-4" />}
+                            {submitLabel ?? (saved ? "Update report" : "Save report")}
+                        </Button>
+                        {footer}
+                        <FieldDescription>
+                            {startedAt === null ? "" : `${Math.round((Date.now() - startedAt) / 1000)}s on this extension`}
+                        </FieldDescription>
+                    </>
+                )}
             </Field>
         </FieldGroup>
     );
@@ -329,12 +366,14 @@ function Toggle({
     hint,
     checked,
     onChange,
+    readOnly = false,
 }: {
     id: string;
     label: string;
     hint: string;
     checked: boolean;
     onChange: (value: boolean) => void;
+    readOnly?: boolean;
 }) {
     return (
         <Item variant="outline" size="sm" asChild>
@@ -344,7 +383,7 @@ function Toggle({
                     <ItemDescription className="hidden lg:block">{hint}</ItemDescription>
                 </ItemContent>
                 <ItemActions>
-                    <Switch id={id} checked={checked} onCheckedChange={onChange} />
+                    <Switch id={id} checked={checked} onCheckedChange={onChange} disabled={readOnly} />
                 </ItemActions>
             </label>
         </Item>

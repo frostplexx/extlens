@@ -10,6 +10,7 @@
  * it asks the thing that served it to.
  */
 import * as React from "react";
+import { useEffect, useState } from "react";
 import type { ExtensionProfile, FileRefs, ManifestSummary, Report, ReportDraft, ScoreBreakdown } from "@extlens/protocol";
 import { Download, MonitorPlay, MousePointerSquareDashed, SquareX, TriangleAlert } from "lucide-react";
 import { WEIGHTS, type WeightKey } from "@extlens/analyzer/scoring";
@@ -78,6 +79,16 @@ export function DetailPane({
     submitError: string | null;
     onOpenUrl?: (url: string) => void;
 }) {
+    /**
+     * Browsing is looking. The report opens read-only and needs an explicit Edit, so that clicking
+     * through the corpus cannot nudge someone else's answers — and so the verification clock does
+     * not run while you are only reading. Review mode is the opposite and passes readOnly={false}.
+     */
+    const [editing, setEditing] = useState(false);
+    // A new extension is a new decision: never carry an edit session across one.
+    useEffect(() => setEditing(false), [profile?.id]);
+
+
     if (loading) {
         return (
             <div className="flex h-full items-center justify-center">
@@ -118,7 +129,7 @@ export function DetailPane({
 
     return (
         <div className="flex h-full min-h-0 flex-col">
-            <header className="mx-auto w-full max-w-3xl shrink-0 space-y-3 p-5">
+            <header className="shrink-0 space-y-3 p-5">
                 <div className="space-y-1">
                     <h2 className="truncate text-lg font-semibold leading-tight" title={profile.name}>
                         {profile.name}
@@ -164,7 +175,7 @@ export function DetailPane({
             <Separator />
 
             <Tabs defaultValue="report" className="flex min-h-0 flex-1 flex-col gap-0">
-                <div className="mx-auto w-full max-w-3xl px-5">
+                <div className="px-5">
                 <TabsList className="mt-4">
                     <TabsTrigger value="report">Report</TabsTrigger>
                     <TabsTrigger value="profile">Profile</TabsTrigger>
@@ -176,15 +187,20 @@ export function DetailPane({
                 {/* The scroller stays full width so the scrollbar sits at the pane edge; the column
                     inside it is what is centred. */}
                 <div className="min-h-0 flex-1 overflow-auto">
-                    <div className="mx-auto w-full max-w-3xl p-5">
+                    <div className="w-full p-5">
                     <TabsContent value="report" className="mt-0">
                         <ReportForm
                             profile={profile}
                             saved={report}
-                            onSubmit={onSubmitReport}
+                            onSubmit={(draft) => {
+                                onSubmitReport(draft);
+                                setEditing(false);
+                            }}
                             submitting={submitting}
                             error={submitError}
                             onOpenUrl={onOpenUrl}
+                            readOnly={!editing}
+                            onRequestEdit={() => setEditing(true)}
                         />
                     </TabsContent>
 

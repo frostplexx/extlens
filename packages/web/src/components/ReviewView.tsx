@@ -146,6 +146,7 @@ export function ReviewView({
                                 submitting={submitting}
                                 error={submitError}
                                 onOpenUrl={onOpenUrl}
+                                readOnly={false}
                                 submitLabel={queue.hasNext ? "Save & next" : "Save & finish"}
                                 footer={
                                     <Tooltip>
