@@ -69,7 +69,9 @@ export function LogDock({
     }, [lines.length, open]);
 
     return (
-        <div className={cn("flex min-h-0 flex-col bg-card", !open && "shrink-0 border-t")}>
+        // h-full when open so the dock tracks the panel it lives in; content-sized when closed,
+        // where it is just a bar at the bottom of the frame.
+        <div className={cn("flex min-h-0 flex-col bg-card", open ? "h-full" : "shrink-0 border-t")}>
             <div className="flex h-10 shrink-0 items-center gap-3 px-3">
                 <Button size="sm" variant="ghost" onClick={() => onOpenChange(!open)}>
                     {open ? <ChevronDown className="size-4" /> : <ChevronUp className="size-4" />}

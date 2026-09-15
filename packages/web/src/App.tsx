@@ -345,12 +345,21 @@ export function App() {
 
                 {logOpen ? (
                     <ResizablePanelGroup orientation="vertical" className="min-h-0 flex-1">
-                        <ResizablePanel defaultSize={70} minSize={25} className="flex min-h-0 flex-col">
+                        {/*
+                          * h-full on every wrapper, deliberately.
+                          *
+                          * The library applies `className` to a div NESTED inside the panel, not to
+                          * the panel itself — so without an explicit height that div is sized by its
+                          * content and simply ignores the panel growing around it. Dragging then
+                          * appears to work in one direction only: shrinking squeezes the content,
+                          * growing just adds empty space below it.
+                          */}
+                        <ResizablePanel defaultSize={70} minSize={20} className="flex h-full min-h-0 flex-col overflow-hidden">
                             {body}
                         </ResizablePanel>
                         {/* The drag target IS the top edge of the log bar. */}
                         <ResizableHandle withHandle />
-                        <ResizablePanel defaultSize={30} minSize={10} maxSize={80} className="flex min-h-0 flex-col">
+                        <ResizablePanel defaultSize={30} minSize={10} maxSize={85} className="flex h-full min-h-0 flex-col overflow-hidden">
                             <LogDock
                                 open
                                 onOpenChange={setLogOpen}
