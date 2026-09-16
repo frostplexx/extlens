@@ -108,13 +108,17 @@ ExtensionLight:
   "score": 74,
   "tags": ["HAS_BROWSER_POPUP", "USES_WEB_REQUEST"],
   "hasMv3": true,
-  "hasReport": false
+  "hasReport": false,
+  "verdict": null
 }
 ```
 
 `score` is the integer interestingness score. `tags` are the feature tags.
 `hasMv3` is true when an MV3 variant exists (the extension was migrated).
 `hasReport` is true when a report exists for the extension (it was tested).
+`verdict` (v7, optional) is that report's verdict — `working | partially_working |
+not_working | not_testable` — or null without one; hosts derive it with the
+protocol's `reportVerdict` so legacy reports resolve identically everywhere.
 The client marks migrated rows and tested rows with distinct icons; the
 tested icon replaces the migrated one.
 
@@ -403,6 +407,7 @@ protocol reserves their names so hosts can detect a newer client.
 
 ## Changelog
 
+- v7 — `ExtensionLight` gains an optional `verdict`, the stored report's verdict, so a list can show what a review found rather than only that one exists. `reportVerdict` derives it for reports of every generation.
 - v6 — `analysis.explain`: an optional, model-backed explanation of a failing report, built by the SDK from the report, both manifest summaries and the MV2→MV3 diff. `Backend.explainFailure` is optional; hosts without it answer `-32601`.
 - v5 — `ExtensionLight` gains `hasReport`: true when a report exists for the extension. The client marks migrated (`hasMv3`) and tested (`hasReport`) rows with distinct unicode icons; the tested icon replaces the migrated one.
 - v4 — the report form matches the ExtPorter form: installs, works in MV2, needs login, popup/settings/new-tab working, interesting, and a tri-state overall working verdict (yes/no/could_not_test). Legacy reports survive via field defaults; boolean overallWorking values normalize to the string form.

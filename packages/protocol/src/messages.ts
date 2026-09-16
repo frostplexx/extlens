@@ -87,6 +87,12 @@ export const ExtensionLightSchema = z.object({
   hasMv3: z.boolean(),
   /** A report exists for this extension (it was tested). */
   hasReport: z.boolean(),
+  /**
+   * The report's verdict, when there is one — what a corpus table is actually scanned for.
+   * Hosts derive it with `reportVerdict` so legacy reports resolve the same way everywhere.
+   * Optional so hosts from before it existed still validate; null when there is no report.
+   */
+  verdict: z.lazy(() => ExtensionVerdictSchema).nullable().optional(),
 });
 
 export const ListStatsSchema = z.object({

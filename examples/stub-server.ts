@@ -16,6 +16,7 @@ import {
   createExtlensServer,
   computeProfile,
   explainerConfigured,
+  reportVerdict,
   type Backend,
   type ExtensionSource,
   type Report,
@@ -75,6 +76,7 @@ function makeBackend(): Backend {
           // every listExtensions response fail protocol validation, so the documented
           // quickstart showed a wall of zod errors instead of the fixture list.
           hasReport: reports.has(profile.id),
+          verdict: reports.has(profile.id) ? reportVerdict(reports.get(profile.id)!) : null,
         };
       });
       const sorted = [...all].sort((a, b) => {

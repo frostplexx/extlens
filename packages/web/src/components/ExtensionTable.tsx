@@ -8,7 +8,8 @@
  */
 import * as React from "react";
 import { useEffect, useMemo, useRef } from "react";
-import type { ExtensionLight, SortOrder } from "@extlens/protocol";
+import type { ExtensionLight, ExtensionVerdict, SortOrder } from "@extlens/protocol";
+import { VERDICT_LABELS } from "@extlens/protocol";
 import {
     flexRender,
     getCoreRowModel,
@@ -16,7 +17,7 @@ import {
     type ColumnDef,
     type SortingState,
 } from "@tanstack/react-table";
-import { ArrowDown, ArrowUp, CheckCircle2, ChevronsUpDown, FileUp } from "lucide-react";
+import { ArrowDown, ArrowUp, CheckCircle2, ChevronsUpDown, CircleAlert, CircleSlash, FileUp, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -66,39 +67,20 @@ export function ExtensionTable({
                 id: "score",
                 accessorKey: "score",
                 header: "Score",
-                size: 90,
+                size: 80,
                 cell: ({ row }) => <ScoreBar score={row.original.score} />,
             },
             {
                 id: "name",
                 accessorKey: "name",
                 header: "Name",
+                // Zero width means "the rest": the only column allowed to flex under fixed layout.
+                size: 0,
+                minSize: 0,
                 cell: ({ row }) => (
                     <span className="block truncate font-medium" title={row.original.name}>
                         {row.original.name}
                     </span>
-                ),
-            },
-            {
-                id: "version",
-                accessorKey: "version",
-                header: "Version",
-                size: 90,
-                enableSorting: false,
-                cell: ({ row }) => (
-                    <span className="tabular-nums text-muted-foreground">{row.original.version ?? "—"}</span>
-                ),
-            },
-            {
-                id: "manifest",
-                accessorKey: "manifestVersion",
-                header: "Manifest",
-                size: 90,
-                enableSorting: false,
-                cell: ({ row }) => (
-                    <Badge variant={row.original.manifestVersion === 3 ? "default" : "secondary"}>
-                        MV{row.original.manifestVersion}
-                    </Badge>
                 ),
             },
             {
@@ -110,11 +92,11 @@ export function ExtensionTable({
                 cell: ({ row }) => <TagList tags={row.original.tags} />,
             },
             {
-                id: "status",
-                header: "Status",
-                size: 110,
+                id: "result",
+                header: "Result",
+                size: 150,
                 enableSorting: false,
-                cell: ({ row }) => <StatusIcons hasReport={row.original.hasReport} hasMv3={row.original.hasMv3} />,
+                cell: ({ row }) => <Result row={row.original} />,
             },
         ],
         [],
@@ -135,7 +117,9 @@ export function ExtensionTable({
 
     return (
         <div className="min-h-0 flex-1 overflow-auto">
-            <Table>
+            {/* Fixed layout: column widths are the ones declared, so the header and every row line up
+                regardless of what a cell happens to contain. */}
+            <Table className="table-fixed">
                 <TableHeader className="sticky top-0 z-10 bg-card">
                     {table.getHeaderGroups().map((group) => (
                         <TableRow key={group.id} className="hover:bg-transparent">
@@ -240,25 +224,55 @@ function TagList({ tags }: { tags: string[] }) {
     );
 }
 
-function StatusIcons({ hasReport, hasMv3 }: { hasReport: boolean; hasMv3: boolean }) {
-    return (
-        <div className="flex items-center gap-1.5">
-            {hasReport ? (
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <CheckCircle2 className="size-4 text-green" />
-                    </TooltipTrigger>
-                    <TooltipContent>a report has been recorded</TooltipContent>
-                </Tooltip>
-            ) : null}
-            {hasMv3 && !hasReport ? (
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <FileUp className="size-4 text-blue" />
-                    </TooltipTrigger>
-                    <TooltipContent>an MV3 migration exists, not yet reviewed</TooltipContent>
-                </Tooltip>
-            ) : null}
-        </div>
-    );
+/**
+ * The one thing a corpus table is scanned for: did the migration hold up?
+ *
+ * Version and manifest used to sit here and answered nothing a reviewer was asking — every row in
+ * a migrated corpus is MV3, and a version string is not something you compare across extensions.
+ * The verdict is; and before there is one, the only other state worth a word is "migrated, not yet
+ * looked at".
+ */
+const RESULT_TONE: Record<ExtensionVerdict, string> = {
+    working: "text-green",
+    partially_working: "text-yellow",
+    not_working: "text-red",
+    not_testable: "text-blue",
+};
+
+const RESULT_ICON: Record<ExtensionVerdict, React.ElementType> = {
+    working: CheckCircle2,
+    partially_working: CircleAlert,
+    not_working: XCircle,
+    not_testable: CircleSlash,
+};
+
+function Result({ row }: { row: ExtensionLight }) {
+    const verdict = row.verdict ?? null;
+    if (verdict) {
+        const Icon = RESULT_ICON[verdict];
+        return (
+            <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap", RESULT_TONE[verdict])}>
+                <Icon className="size-4 shrink-0" />
+                {VERDICT_LABELS[verdict]}
+            </span>
+        );
+    }
+    if (row.hasReport) {
+        // A host from before the verdict field: it says there is a report but not what it found.
+        return (
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-muted-foreground">
+                <CheckCircle2 className="size-4 shrink-0" />
+                Reviewed
+            </span>
+        );
+    }
+    if (row.hasMv3) {
+        return (
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-muted-foreground">
+                <FileUp className="size-4 shrink-0" />
+                Not reviewed
+            </span>
+        );
+    }
+    return <span className="text-muted-foreground">—</span>;
 }

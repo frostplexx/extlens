@@ -11,9 +11,11 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import Database from "better-sqlite3";
 import type { ExtensionSource, SourceFile } from "@extlens/analyzer";
+import { reportVerdict } from "@extlens/protocol";
 import type {
   ExtensionLight,
   ExtensionProfile,
+  ExtensionVerdict,
   FileRefs,
   ListParams,
   ListResult,
@@ -345,7 +347,7 @@ class FolderBackendImpl implements Backend {
       | undefined) ?? null;
   }
 
-  private rowToLight(row: ExtensionRow, hasReport: boolean): ExtensionLight {
+  private rowToLight(row: ExtensionRow, verdict: ExtensionVerdict | null): ExtensionLight {
     return {
       id: row.id,
       name: row.name,
@@ -354,7 +356,8 @@ class FolderBackendImpl implements Backend {
       score: row.score,
       tags: JSON.parse(row.tags) as string[],
       hasMv3: false,
-      hasReport,
+      hasReport: verdict !== null,
+      verdict,
     };
   }
 
@@ -403,14 +406,16 @@ class FolderBackendImpl implements Backend {
       avg: number | null;
       mv3: number | null;
     };
-    // One query for the report set: any extension with a report counts as tested.
-    const reported = new Set(
-      (this.db.prepare("SELECT extension_id FROM reports").all() as {
+    // One query for every verdict: a report is what makes an extension tested, and its verdict
+    // is the column the table is scanned by.
+    const verdicts = new Map(
+      (this.db.prepare("SELECT extension_id, payload FROM reports").all() as {
         extension_id: string;
-      }[]).map((r) => r.extension_id),
+        payload: string;
+      }[]).map((r) => [r.extension_id, reportVerdict(JSON.parse(r.payload) as Report)]),
     );
     return {
-      extensions: pageRows.map((r) => this.rowToLight(r, reported.has(r.id))),
+      extensions: pageRows.map((r) => this.rowToLight(r, verdicts.get(r.id) ?? null)),
       stats: {
         total,
         analyzed: total,

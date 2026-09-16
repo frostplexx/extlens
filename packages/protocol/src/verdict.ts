@@ -93,3 +93,27 @@ export const VERDICT_LABELS: Record<ExtensionVerdict, string> = {
     not_working: "Not working",
     not_testable: "Not testable",
 };
+
+/**
+ * The verdict a stored report stands for, whatever generation of form wrote it.
+ *
+ * New reports carry `verdict`. Older ones carry per-surface results the verdict can be derived
+ * from, and the oldest carry only the tri-state `overallWorking`. A table column that showed only
+ * the first would say "—" for most of a corpus reviewed before the field existed.
+ */
+export function reportVerdict(report: {
+    verdict?: ExtensionVerdict | null;
+    surfaces?: SurfaceResult[];
+    overallWorking?: "yes" | "no" | "could_not_test" | null;
+}): ExtensionVerdict {
+    if (report.verdict) return report.verdict;
+    if (report.surfaces?.some((s) => s.status !== "untested")) return verdictFor(report.surfaces);
+    switch (report.overallWorking) {
+        case "yes":
+            return "working";
+        case "no":
+            return "not_working";
+        default:
+            return "not_testable";
+    }
+}
