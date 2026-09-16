@@ -18,14 +18,18 @@ import { probeUrls } from "@extlens/analyzer/match-patterns";
 import { listenersBySurface } from "@extlens/analyzer/surfaces";
 import { ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { CircleDashed, CircleSlash, CheckCircle2, CircleAlert, XCircle } from "lucide-react";
+import { CircleSlash, CheckCircle2, CircleAlert, XCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { SourceLink } from "./shared";
 
+/**
+ * The four answers a reviewer can give. "Untested" is not one of them: it is the absence of an
+ * answer — nothing pressed — and offering it as a button beside "Can't test" made two controls for
+ * what reads as one question. Both are excluded from the score; only one is a thing you say.
+ */
 const STATUSES: { value: SurfaceStatus; label: string; icon: React.ElementType; tone: string }[] = [
-    { value: "untested", label: "Untested", icon: CircleDashed, tone: "text-muted-foreground" },
     { value: "working", label: "Works", icon: CheckCircle2, tone: "text-green" },
     { value: "partial", label: "Partly works", icon: CircleAlert, tone: "text-yellow" },
     { value: "broken", label: "Broken", icon: XCircle, tone: "text-red" },

@@ -284,8 +284,8 @@ export function ReportForm({
                         </span>
                     ) : (
                         <>
-                            Judge each surface the extension has. Leave one untested rather than guessing, and
-                            mark it “can’t test” when the harness is what is in the way.
+                            Judge each surface the extension has. Leave one blank rather than guessing, and mark it
+                            “can’t test” when the harness is what is in the way.
                         </>
                     )}
                 </FieldDescription>
