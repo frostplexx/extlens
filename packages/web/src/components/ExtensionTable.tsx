@@ -64,6 +64,15 @@ export function ExtensionTable({
     const columns = useMemo<ColumnDef<ExtensionLight>[]>(
         () => [
             {
+                // First and wordless: the verdict is what the eye scans the column for, and a glyph
+                // in a fixed narrow slot reads faster than a label the eye has to parse per row.
+                id: "result",
+                header: "",
+                size: 40,
+                enableSorting: false,
+                cell: ({ row }) => <Result row={row.original} />,
+            },
+            {
                 id: "score",
                 accessorKey: "score",
                 header: "Score",
@@ -90,13 +99,6 @@ export function ExtensionTable({
                 size: 320,
                 enableSorting: false,
                 cell: ({ row }) => <TagList tags={row.original.tags} />,
-            },
-            {
-                id: "result",
-                header: "Result",
-                size: 150,
-                enableSorting: false,
-                cell: ({ row }) => <Result row={row.original} />,
             },
         ],
         [],
@@ -248,31 +250,23 @@ const RESULT_ICON: Record<ExtensionVerdict, React.ElementType> = {
 
 function Result({ row }: { row: ExtensionLight }) {
     const verdict = row.verdict ?? null;
-    if (verdict) {
-        const Icon = RESULT_ICON[verdict];
-        return (
-            <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap", RESULT_TONE[verdict])}>
-                <Icon className="size-4 shrink-0" />
-                {VERDICT_LABELS[verdict]}
-            </span>
-        );
-    }
-    if (row.hasReport) {
-        // A host from before the verdict field: it says there is a report but not what it found.
-        return (
-            <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-muted-foreground">
-                <CheckCircle2 className="size-4 shrink-0" />
-                Reviewed
-            </span>
-        );
-    }
-    if (row.hasMv3) {
-        return (
-            <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-muted-foreground">
-                <FileUp className="size-4 shrink-0" />
-                Not reviewed
-            </span>
-        );
-    }
-    return <span className="text-muted-foreground">—</span>;
+    const glyph: { Icon: React.ElementType; tone: string; label: string } | null = verdict
+        ? { Icon: RESULT_ICON[verdict], tone: RESULT_TONE[verdict], label: VERDICT_LABELS[verdict] }
+        : row.hasReport
+          // A host from before the verdict field: it says there is a report but not what it found.
+          ? { Icon: CheckCircle2, tone: "text-muted-foreground", label: "Reviewed" }
+          : row.hasMv3
+            ? { Icon: FileUp, tone: "text-muted-foreground", label: "Migrated, not yet reviewed" }
+            : null;
+    if (!glyph) return <span className="block text-center text-muted-foreground">—</span>;
+    return (
+        <Tooltip>
+            <TooltipTrigger asChild>
+                <span className={cn("flex justify-center", glyph.tone)} aria-label={glyph.label}>
+                    <glyph.Icon className="size-4" />
+                </span>
+            </TooltipTrigger>
+            <TooltipContent>{glyph.label}</TooltipContent>
+        </Tooltip>
+    );
 }
