@@ -16,9 +16,21 @@ import { Spinner } from "@/components/ui/spinner";
 
 export type ExplainFn = (extensionId: string) => Promise<ExplainResult>;
 
-/** The host said it has no explainer. The message is the SDK's; matching it is how a page can tell. */
-function isUnsupported(message: string): boolean {
-    return /no model configured|unknown method|not found|not implemented/i.test(message);
+/**
+ * Why the host could not answer, in the reviewer's terms.
+ *
+ * Two different situations arrive as -32601: a host that knows the method but has no model, and a
+ * host running an SDK from before the method existed. They need different fixes, so they get
+ * different sentences; anything else is the host's own words.
+ */
+function unsupportedReason(message: string): string | null {
+    if (/no model configured/i.test(message)) {
+        return "This host has no model configured. Give it one — LLM_MODEL for a migrator host, or ANTHROPIC_API_KEY — and restart it.";
+    }
+    if (/unknown method|not found|not implemented/i.test(message)) {
+        return "This host predates failure explanations. Update its extlens SDK and restart it.";
+    }
+    return null;
 }
 
 export function ExplainCard({
@@ -35,7 +47,7 @@ export function ExplainCard({
         | { kind: "idle" }
         | { kind: "loading" }
         | { kind: "done"; result: ExplainResult }
-        | { kind: "error"; message: string; unsupported: boolean }
+        | { kind: "error"; message: string; reason: string | null }
     >({ kind: "idle" });
     // An explanation is about one extension's report; it must not linger onto the next row.
     useEffect(() => setState({ kind: "idle" }), [extensionId]);
@@ -44,7 +56,7 @@ export function ExplainCard({
         setState({ kind: "loading" });
         explain(extensionId)
             .then((result) => setState({ kind: "done", result }))
-            .catch((e: Error) => setState({ kind: "error", message: e.message, unsupported: isUnsupported(e.message) }));
+            .catch((e: Error) => setState({ kind: "error", message: e.message, reason: unsupportedReason(e.message) }));
     };
 
     return (
@@ -61,7 +73,7 @@ export function ExplainCard({
                 </CardDescription>
                 <CardAction>
                     {state.kind === "idle" || state.kind === "error" ? (
-                        <Button size="sm" variant="outline" onClick={run} disabled={state.kind === "error" && state.unsupported}>
+                        <Button size="sm" variant="outline" onClick={run} disabled={state.kind === "error" && state.reason !== null}>
                             <Sparkles className="size-4" />
                             Explain
                         </Button>
@@ -93,9 +105,7 @@ export function ExplainCard({
                 <CardContent>
                     <p className="flex items-start gap-2 text-sm text-peach">
                         <TriangleAlert className="mt-0.5 size-4 shrink-0" />
-                        {state.unsupported
-                            ? "This host has no model configured. Set ANTHROPIC_API_KEY where the host runs and restart it."
-                            : state.message}
+                        {state.reason ?? state.message}
                     </p>
                 </CardContent>
             ) : null}
