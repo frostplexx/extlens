@@ -6,7 +6,7 @@
  * profile is the core motion of a review pass, and having either move under the reader breaks it.
  */
 import * as React from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import type { ReportDraft } from "@extlens/protocol";
 import { ChevronLeft, ChevronRight, PackageOpen, SearchX } from "lucide-react";
 import { toast } from "sonner";
@@ -29,18 +29,32 @@ import { LogDock } from "./components/LogDock";
 import { ReviewView } from "./components/ReviewView";
 import { Toolbar } from "./components/Toolbar";
 import { TopBar } from "./components/TopBar";
+import { Spinner } from "@/components/ui/spinner";
+import type { AppMode } from "./types";
+import type { CodeTarget } from "./components/CodeView";
+
+// Lazy because Code mode carries Monaco, and browse/review should not pay for it.
+const CodeView = lazy(() => import("./components/CodeView"));
 
 export function App() {
     const bridge = useBridge();
     const connected = bridge.status === "open" && bridge.session?.connection === "connected";
 
-    const [mode, setMode] = useState<"browse" | "review">("browse");
+    const [mode, setMode] = useState<AppMode>("browse");
+    /**
+     * Code mode is a detour, not a destination: it reads whatever browse or review had selected,
+     * and Back returns to where it was entered from. So the mode that *drives* the subject stays
+     * the one underneath, and the review queue is not torn down for reading code mid-pass.
+     */
+    const [codeFrom, setCodeFrom] = useState<"browse" | "review">("browse");
+    const driving = mode === "code" ? codeFrom : mode;
+    const [codeTarget, setCodeTarget] = useState<CodeTarget | null>(null);
     const [autoLaunch, setAutoLaunch] = useState(true);
 
     const list = useExtensions(bridge, connected);
-    const queue = useReviewQueue(bridge, connected, list.sort, mode === "review");
+    const queue = useReviewQueue(bridge, connected, list.sort, driving === "review");
     // One profile hook serves both modes; which extension it loads is whichever mode is driving.
-    const subjectId = mode === "review" ? (queue.current?.id ?? null) : list.selectedId;
+    const subjectId = driving === "review" ? (queue.current?.id ?? null) : list.selectedId;
     const profile = useProfile(bridge, subjectId, connected);
     /**
      * File refs, but only once they belong to the extension on screen.
@@ -85,6 +99,28 @@ export function App() {
         },
         [bridge],
     );
+
+    /** Show a file — a listener's, or the manifest by default — in Code mode, remembering the way back. */
+    const openInCode = useCallback(
+        (path: string | null, line: number | null) => {
+            setMode((current) => {
+                if (current !== "code") setCodeFrom(current);
+                return "code";
+            });
+            if (path) setCodeTarget((t) => ({ path, line, nonce: (t?.nonce ?? 0) + 1 }));
+        },
+        [],
+    );
+
+    const changeMode = useCallback(
+        (next: AppMode) => {
+            if (next === "code") openInCode(null, null);
+            else setMode(next);
+        },
+        [openInCode],
+    );
+
+    const exitCode = useCallback(() => setMode(codeFrom), [codeFrom]);
 
     /**
      * Download every saved report.
@@ -172,6 +208,16 @@ export function App() {
                 return;
             }
             if (typing || e.metaKey || e.ctrlKey) return;
+            // Code mode is a detour: Escape goes back, and the list keys are left alone so the
+            // subject cannot change underneath the editor.
+            if (mode === "code") {
+                if (e.key === "Escape") exitCode();
+                return;
+            }
+            if (e.key === "c") {
+                openInCode(null, null);
+                return;
+            }
             // Review mode moves through the queue; browse mode moves the table selection.
             if (mode === "review" && (e.key === "]" || e.key === "j")) {
                 e.preventDefault();
@@ -195,7 +241,7 @@ export function App() {
         };
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
-    }, [run, mode, queue, list, readyFiles, subjectId]);
+    }, [run, mode, queue, list, readyFiles, subjectId, openInCode, exitCode]);
 
     const empty = list.rows.length === 0 && !list.loading;
 
@@ -206,7 +252,24 @@ export function App() {
      * shares a resizable split; closed, it is a fixed bar underneath — and the body itself does
      * not care which.
      */
-    const body = mode === "review" ? (
+    const body = mode === "code" ? (
+                    <Suspense
+                        fallback={
+                            <div className="flex flex-1 items-center justify-center">
+                                <Spinner className="size-5 text-muted-foreground" />
+                            </div>
+                        }
+                    >
+                        <CodeView
+                            bridge={bridge}
+                            profile={profile.loadedId === subjectId ? profile.profile : null}
+                            files={readyFiles}
+                            subjectId={subjectId}
+                            target={codeTarget}
+                            onExit={exitCode}
+                        />
+                    </Suspense>
+                ) : mode === "review" ? (
                     <ReviewView
                         queue={queue}
                         profile={profile.profile}
@@ -224,6 +287,7 @@ export function App() {
                         submitting={submitting}
                         submitError={submitError}
                         onOpenUrl={openUrl}
+                        onOpenSource={openInCode}
                         onExit={() => setMode("browse")}
                     />
                 ) : (
@@ -318,6 +382,7 @@ export function App() {
                                 submitting={submitting}
                                 submitError={submitError}
                                 onOpenUrl={openUrl}
+                                onOpenSource={openInCode}
                             />
                         </aside>
                     </ResizablePanel>
@@ -338,7 +403,7 @@ export function App() {
                     }}
                     onToggleHost={host.toggle}
                     mode={mode}
-                    onModeChange={setMode}
+                    onModeChange={changeMode}
                     onExport={exportReports}
                     exporting={exporting}
                 />

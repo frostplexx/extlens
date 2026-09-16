@@ -104,9 +104,12 @@ export function ReportForm({
     submitLabel,
     footer,
     onOpenUrl,
+    onOpenSource,
     readOnly = false,
     onRequestEdit,
 }: {
+    /** Open a listener's file at its line in Code mode; omitted where that is not wired up. */
+    onOpenSource?: (path: string, line: number | null) => void;
     profile: ExtensionProfile;
     saved: Report | null;
     onSubmit: (draft: ReportDraft) => void;
@@ -267,6 +270,8 @@ export function ReportForm({
                     detected={detected}
                     contentScriptMatches={(profile.manifest.contentScripts ?? []).flatMap((cs) => cs.matches)}
                     onOpenUrl={onOpenUrl}
+                    onOpenSource={onOpenSource}
+                    listeners={profile.listeners}
                     results={draft.surfaces}
                     onChange={(surface: UiSurface, patch) =>
                         setDraft((d) => ({

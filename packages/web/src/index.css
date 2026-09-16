@@ -138,3 +138,7 @@ body,
     @apply font-sans;
   }
 }
+/* The line a listener click landed on. Monaco owns the editor's DOM, so this is a global class. */
+.code-jump-line {
+  background: color-mix(in srgb, var(--color-mauve) 18%, transparent);
+}

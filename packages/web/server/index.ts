@@ -30,6 +30,8 @@ const MIME: Record<string, string> = {
     ".svg": "image/svg+xml",
     ".json": "application/json; charset=utf-8",
     ".woff2": "font/woff2",
+    // Monaco's icon font (codicon.ttf) — without a font type the browser refuses to apply it.
+    ".ttf": "font/ttf",
 };
 
 function flag(argv: string[], name: string): string | null {

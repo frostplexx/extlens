@@ -108,7 +108,9 @@ function makeBackend(): Backend {
       const source = sources.get(id);
       if (!source) return null;
       // The fixture dir contains the mv2 manifest at its root.
-      return { mv2: `file://${join(FIXTURES, [...sources.keys()].find((k) => k === id)!)}` };
+      const mv2 = `file://${join(FIXTURES, DIRS.find((d) => d.split("/").pop() === id)!)}`;
+      // one-ext has a hand-migrated sibling, so the code explorer's diff has something to show.
+      return id === "one-ext" ? { mv2, mv3: `file://${join(FIXTURES, "one-ext-mv3")}` } : { mv2 };
     },
 
     async getReport(extensionId) {

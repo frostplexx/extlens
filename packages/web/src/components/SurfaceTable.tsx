@@ -22,6 +22,7 @@ import { CircleDashed, CircleSlash, CheckCircle2, CircleAlert, XCircle } from "l
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { SourceLink } from "./shared";
 
 const STATUSES: { value: SurfaceStatus; label: string; icon: React.ElementType; tone: string }[] = [
     { value: "untested", label: "Untested", icon: CircleDashed, tone: "text-muted-foreground" },
@@ -37,9 +38,12 @@ export function SurfaceTable({
     onChange,
     contentScriptMatches = [],
     onOpenUrl,
+    onOpenSource,
     listeners = [],
     readOnly = false,
 }: {
+    /** Open a listener's file at its line in Code mode; omitted where that is not wired up. */
+    onOpenSource?: (path: string, line: number | null) => void;
     detected: DetectedSurface[];
     results: SurfaceResult[];
     onChange: (surface: UiSurface, patch: Partial<SurfaceResult>) => void;
@@ -106,12 +110,13 @@ export function SurfaceTable({
                                                     {l.kind === "call" ? "creates" : "on"}{" "}
                                                 </span>
                                                 <span className="font-mono text-xs text-muted-foreground/70">
-                                                    {l.api}
-                                                    <span className="text-muted-foreground/50">
-                                                        {" "}
-                                                        {l.file}
-                                                        {l.line === null ? "" : `:${l.line}`}
-                                                    </span>
+                                                    {l.api}{" "}
+                                                    <SourceLink
+                                                        file={l.file}
+                                                        line={l.line}
+                                                        onOpenSource={onOpenSource}
+                                                        className="text-muted-foreground/50"
+                                                    />
                                                 </span>
                                             </li>
                                         ))}

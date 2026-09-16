@@ -3,7 +3,8 @@
  *
  * Most methods are the extlens protocol and are forwarded verbatim to the host — the server does
  * not model the corpus, it relays. A handful are *local* methods that only make sense on this
- * machine: launching Chrome for Testing, closing it, reading its state. That split is the whole
+ * machine: launching Chrome for Testing, closing it, reading its state, reading the extension's
+ * source off disk for the code explorer. That split is the whole
  * reason a web UI can still drive real browsers. The page cannot spawn a process, but the process
  * serving the page can, and it is the same process that already runs the ssh tunnel and the
  * file-ref downloads for the terminal client.
@@ -24,6 +25,7 @@ import {
 } from "@extlens/session";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { diffSource, readSourceFile, type SourceFile, type SourceTree } from "./source.js";
 
 export type BrowserLabel = "mv2" | "mv3";
 
@@ -73,6 +75,12 @@ export class Bridge {
     private prompts: DownloadPrompt[] = [];
     /** File refs of the extension the browsers were last asked to open. */
     private lastFiles: FileRefs | null = null;
+    /**
+     * Resolved refs per extension. Over ssh, resolving means tarring the remote directory down,
+     * and the code explorer asks for the tree and then for one file at a time — without this
+     * every click would be a fresh download of the whole extension.
+     */
+    private resolved = new Map<string, FileRefs>();
 
     constructor(private deps: BridgeDeps) {}
 
@@ -93,6 +101,15 @@ export class Bridge {
                 return this.answerPrompt(Boolean(params.accept));
             case "local.openUrl":
                 return this.openUrl(String(params.url ?? ""));
+            case "local.source.tree":
+                return this.sourceTree(params.files as FileRefs | null, params.id as string | undefined);
+            case "local.source.file":
+                return this.sourceFile(
+                    params.files as FileRefs | null,
+                    params.id as string | undefined,
+                    params.label,
+                    params.path,
+                );
             default:
                 throw new Error(`unknown local method: ${method}`);
         }
@@ -105,7 +122,7 @@ export class Bridge {
 
     private async launch(files: FileRefs | null, id?: string): Promise<unknown> {
         if (!files) return this.snapshot();
-        this.lastFiles = await this.resolve(files, id);
+        this.lastFiles = await this.resolveCached(files, id);
         await this.browsers.closeAll();
         this.state = { mv2: { ...IDLE }, mv3: { ...IDLE } };
         this.prompts = [];
@@ -138,6 +155,32 @@ export class Bridge {
             if (ref) resolved[label] = await session.downloadRef(label, id ?? "extension", ref);
         }
         return resolved;
+    }
+
+    private async resolveCached(files: FileRefs, id?: string): Promise<FileRefs> {
+        const key = `${id ?? ""}\0${files.mv2 ?? ""}\0${files.mv3 ?? ""}`;
+        const hit = this.resolved.get(key);
+        if (hit) return hit;
+        const resolved = await this.resolve(files, id);
+        this.resolved.set(key, resolved);
+        return resolved;
+    }
+
+    /** The extension's files with an MV2→MV3 status per path, for the code explorer. */
+    private async sourceTree(files: FileRefs | null, id?: string): Promise<SourceTree> {
+        if (!files) throw new Error("no files for this extension");
+        const local = await this.resolveCached(files, id);
+        return diffSource(local.mv2 ? refToPath(local.mv2) : undefined, local.mv3 ? refToPath(local.mv3) : undefined);
+    }
+
+    private async sourceFile(files: FileRefs | null, id: string | undefined, label: unknown, path: unknown): Promise<SourceFile> {
+        if (!files) throw new Error("no files for this extension");
+        if (label !== "mv2" && label !== "mv3") throw new Error(`unknown variant: ${String(label)}`);
+        if (typeof path !== "string") throw new Error("path must be a string");
+        const local = await this.resolveCached(files, id);
+        const ref = local[label];
+        if (!ref) throw new Error(`no ${label} files for this extension`);
+        return readSourceFile(refToPath(ref), path);
     }
 
     private launchOne(label: BrowserLabel, executable: string, extensionPath: string): void {

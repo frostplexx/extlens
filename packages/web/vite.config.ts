@@ -19,8 +19,16 @@ export default defineConfig({
          * The default 500 kB warning is about download cost over a network. This bundle is served
          * from 127.0.0.1 by the same process that owns the browsers, so splitting it would trade a
          * measurable startup simplification for nothing. Raised deliberately, not silenced.
+         *
+         * Monaco is the exception: it is several MB on its own and only Code mode needs it, so it
+         * is its own chunk behind a lazy import, and the limit covers it rather than the main one.
          */
-        chunkSizeWarningLimit: 800,
+        chunkSizeWarningLimit: 5000,
+        rollupOptions: {
+            output: {
+                manualChunks: { monaco: ["monaco-editor"] },
+            },
+        },
     },
     server: { port: 5173 },
 });

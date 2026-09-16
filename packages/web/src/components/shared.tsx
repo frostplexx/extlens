@@ -66,3 +66,41 @@ export function PhaseBadge({ phase }: { phase: string }) {
 export function prettyTag(tag: string): string {
     return tag.toLowerCase().replace(/_/g, " ");
 }
+
+/**
+ * A `file:line` that opens the code, when there is somewhere to open it.
+ *
+ * The analyzer's locations used to be printed and left there — a path you had to go and find by
+ * hand. With Code mode they are the fastest way in, so they are links whenever a handler exists,
+ * and stay plain text when the caller has none (a form embedded somewhere without the mode).
+ */
+export function SourceLink({
+    file,
+    line,
+    onOpenSource,
+    className,
+}: {
+    file: string;
+    line: number | null;
+    onOpenSource?: (path: string, line: number | null) => void;
+    className?: string;
+}) {
+    const label = line ? `${file}:${line}` : file;
+    if (!onOpenSource) return <Mono className={cn("text-muted-foreground", className)}>{label}</Mono>;
+    return (
+        <button
+            type="button"
+            className={cn(
+                "cursor-pointer rounded-sm font-mono text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:underline focus-visible:outline-none",
+                className,
+            )}
+            onClick={(e) => {
+                e.stopPropagation();
+                onOpenSource(file, line);
+            }}
+            title="Open in Code mode"
+        >
+            {label}
+        </button>
+    );
+}

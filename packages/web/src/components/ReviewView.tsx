@@ -58,7 +58,9 @@ export function ReviewView({
     submitError,
     onExit,
     onOpenUrl,
+    onOpenSource,
 }: {
+    onOpenSource?: (path: string, line: number | null) => void;
     queue: ReviewQueue;
     profile: ExtensionProfile | null;
     files: FileRefs | null;
@@ -146,6 +148,7 @@ export function ReviewView({
                                 submitting={submitting}
                                 error={submitError}
                                 onOpenUrl={onOpenUrl}
+                                onOpenSource={onOpenSource}
                                 readOnly={false}
                                 submitLabel={queue.hasNext ? "Save & next" : "Save & finish"}
                                 footer={

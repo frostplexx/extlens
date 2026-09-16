@@ -7,7 +7,7 @@
  */
 import * as React from "react";
 import type { HostStatus } from "@extlens/protocol";
-import { ClipboardCheck, Cpu, Download, Play, Square, Table2, Terminal } from "lucide-react";
+import { ClipboardCheck, Cpu, Download, FileCode2, Play, Square, Table2, Terminal } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { estimate } from "@/lib/eta";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { BridgeStatus } from "../bridge";
-import type { SessionState } from "../types";
+import type { AppMode, SessionState } from "../types";
 import { cn } from "@/lib/utils";
 
 export function TopBar({
@@ -32,8 +32,8 @@ export function TopBar({
     session: SessionState | null;
     host: { status: HostStatus | null; supported: boolean; running: boolean; model?: string | null };
     onToggleHost: () => void;
-    mode: "browse" | "review";
-    onModeChange: (mode: "browse" | "review") => void;
+    mode: AppMode;
+    onModeChange: (mode: AppMode) => void;
     onExport: () => void;
     exporting: boolean;
 }) {
@@ -86,6 +86,15 @@ export function TopBar({
                 >
                     <ClipboardCheck className="size-4" />
                     Review
+                </Button>
+                <Button
+                    size="sm"
+                    variant={mode === "code" ? "secondary" : "ghost"}
+                    className={mode === "code" ? "bg-background shadow-sm" : ""}
+                    onClick={() => onModeChange("code")}
+                >
+                    <FileCode2 className="size-4" />
+                    Code
                 </Button>
             </div>
 

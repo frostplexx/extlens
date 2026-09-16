@@ -178,9 +178,28 @@ through — one extension at a time, with the queue keeping your place:
 - pages are fetched ahead of the cursor, so a pass runs past page boundaries
   without you noticing there were any
 
-Keyboard: `/` search, `b`/`x` launch/close browsers, `l` log. In browse mode
-`j`/`k` move the selection; in review mode `]`/`[` (or `j`/`k`) move through the
-queue.
+### Code mode
+
+The profile says what the analyzer found; code mode shows the thing it found it
+in. `c` (or the **Code** button) opens the selected extension as a file tree with
+a read-only Monaco editor. When the host serves both variants, the tree carries
+VS Code's git decorations — `A` added, `M` modified, `D` removed in MV3 — and a
+changed file opens as a side-by-side MV2→MV3 diff; `Diff | MV2 | MV3` switches
+the view, and "Changed only" narrows the tree to the migration's footprint.
+Every `file:line` a listener shows is a link into it.
+
+The files come through two `local.*` methods (`local.source.tree`,
+`local.source.file`) that read the same directories a browser launch uses — so a
+remote corpus is browsable once its refs have been downloaded, and the protocol
+still adds nothing. Reads are confined to the extension directory; a path that
+resolves outside it (`..`, a symlink out) is refused.
+
+Code mode is a detour: `Esc` returns to wherever it was entered from, browse or
+review, with the queue position intact.
+
+Keyboard: `/` search, `b`/`x` launch/close browsers, `l` log, `c` code. In browse
+mode `j`/`k` move the selection; in review mode `]`/`[` (or `j`/`k`) move through
+the queue.
 
 ## SSH mode
 

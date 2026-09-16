@@ -12,7 +12,7 @@
 import * as React from "react";
 import { useEffect, useState } from "react";
 import type { ExtensionProfile, FileRefs, ManifestSummary, Report, ReportDraft, ScoreBreakdown } from "@extlens/protocol";
-import { Download, MonitorPlay, MousePointerSquareDashed, SquareX, TriangleAlert } from "lucide-react";
+import { Download, FileCode2, MonitorPlay, MousePointerSquareDashed, SquareX, TriangleAlert } from "lucide-react";
 import { WEIGHTS, type WeightKey } from "@extlens/analyzer/scoring";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -23,8 +23,9 @@ import { Kbd } from "@/components/ui/kbd";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { LocalSnapshot } from "../types";
-import { Mono, PhaseBadge, ScoreBar, prettyTag } from "./shared";
+import { Mono, PhaseBadge, ScoreBar, SourceLink, prettyTag } from "./shared";
 import { ReportForm } from "./ReportForm";
 
 const BREAKDOWN_LABELS: [keyof ScoreBreakdown, string][] = [
@@ -64,6 +65,7 @@ export function DetailPane({
     submitting,
     submitError,
     onOpenUrl,
+    onOpenSource,
 }: {
     profile: ExtensionProfile | null;
     files: FileRefs | null;
@@ -78,6 +80,8 @@ export function DetailPane({
     submitting: boolean;
     submitError: string | null;
     onOpenUrl?: (url: string) => void;
+    /** Show a file in Code mode; `null` path means "the extension", starting at the manifest. */
+    onOpenSource?: (path: string | null, line: number | null) => void;
 }) {
     /**
      * Browsing is looking. The report opens read-only and needs an explicit Edit, so that clicking
@@ -170,6 +174,7 @@ export function DetailPane({
                 onLaunch={onLaunch}
                 onCloseBrowsers={onCloseBrowsers}
                 onAnswerPrompt={onAnswerPrompt}
+                onOpenSource={onOpenSource ? () => onOpenSource(null, null) : undefined}
             />
 
             <Separator />
@@ -199,6 +204,7 @@ export function DetailPane({
                             submitting={submitting}
                             error={submitError}
                             onOpenUrl={onOpenUrl}
+                            onOpenSource={onOpenSource}
                             readOnly={!editing}
                             onRequestEdit={() => setEditing(true)}
                         />
@@ -243,11 +249,8 @@ export function DetailPane({
                             <ul className="space-y-1">
                                 {profile.listeners.map((l) => (
                                     <li key={`${l.api}:${l.file}:${l.line}`} className="truncate">
-                                        <Mono>{l.api}</Mono>
-                                        <Mono className="text-muted-foreground">
-                                            {" "}
-                                            {l.file}:{l.line}
-                                        </Mono>
+                                        <Mono>{l.api}</Mono>{" "}
+                                        <SourceLink file={l.file} line={l.line} onOpenSource={onOpenSource} />
                                     </li>
                                 ))}
                             </ul>
@@ -272,6 +275,7 @@ function BrowserControls({
     onLaunch,
     onCloseBrowsers,
     onAnswerPrompt,
+    onOpenSource,
 }: {
     local: LocalSnapshot;
     canLaunch: boolean;
@@ -279,6 +283,7 @@ function BrowserControls({
     onLaunch: () => void;
     onCloseBrowsers: () => void;
     onAnswerPrompt: (accept: boolean) => void;
+    onOpenSource?: () => void;
 }) {
     const prompt = local.prompts[0];
     const busy = Object.values(local.browsers).some((b) => b.phase === "launching" || b.phase === "downloading");
@@ -288,6 +293,21 @@ function BrowserControls({
             <div className="flex items-center justify-between">
                 <h3 className="text-sm font-medium">Test browsers</h3>
                 <div className="flex gap-2">
+                    {/* Reading the code sits with launching it: both are "look at the extension",
+                        and both need the same file refs. */}
+                    {onOpenSource ? (
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button size="sm" variant="outline" onClick={onOpenSource} disabled={!canLaunch}>
+                                    <FileCode2 className="size-4" />
+                                    Code
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                Browse the source and the MV2→MV3 diff. <Kbd>c</Kbd>
+                            </TooltipContent>
+                        </Tooltip>
+                    ) : null}
                     <Button size="sm" onClick={onLaunch} disabled={!canLaunch || busy}>
                         {busy ? <Spinner /> : <MonitorPlay className="size-4" />}
                         Launch
