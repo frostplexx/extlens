@@ -22,6 +22,7 @@ import type {
 } from "@extlens/protocol";
 import type { Backend } from "./backend.js";
 import { computeProfile } from "./profile.js";
+import { createExplainer, explainerConfigured, type Explainer } from "./explainer.js";
 
 const MAX_TEXT_FILE = 10 * 1024 * 1024;
 
@@ -182,6 +183,11 @@ export interface FolderBackendOptions {
   refresh?: boolean;
   /** Progress callback during ingest (done, total). */
   onProgress?: (done: number, total: number) => void;
+  /**
+   * Model-backed failure explanations (analysis.explain). Defaults to one built from
+   * ANTHROPIC_API_KEY when that is set; otherwise the method is not offered.
+   */
+  explainer?: Explainer | null;
 }
 
 const SCHEMA = `
@@ -218,6 +224,12 @@ class FolderBackendImpl implements Backend {
   private readonly db: Database.Database;
   private readonly roots: string[];
   private readonly refresh: boolean;
+  /**
+   * Set on the instance rather than declared as a method so that a host without a model leaves
+   * `explainFailure` undefined — which is how the SDK knows to answer -32601 instead of failing
+   * on every call.
+   */
+  explainFailure?: Backend["explainFailure"];
 
   constructor(folder: string, opts: FolderBackendOptions = {}) {
     const dbPath = opts.dbPath ?? join(folder, ".extlens.sqlite");
@@ -227,6 +239,22 @@ class FolderBackendImpl implements Backend {
     this.migrate();
     this.roots = discoverExtensions(folder);
     this.ingest(opts.onProgress);
+    const explainer = opts.explainer === undefined ? (explainerConfigured() ? createExplainer() : null) : opts.explainer;
+    if (explainer) {
+      this.explainFailure = async (id) => {
+        const row = this.row(id);
+        if (!row) return null;
+        // A folder holds one variant per directory, so there is no diff — the model gets the
+        // report, the manifest summary and the tree it has, and is told as much.
+        const files = readTree(row.path);
+        const profile = this.rowToProfile(row);
+        return explainer.explain({
+          profile,
+          report: await this.getReport(id),
+          ...(row.manifest_version === 3 ? { mv3: files } : { mv2: files }),
+        });
+      };
+    }
   }
 
   /**

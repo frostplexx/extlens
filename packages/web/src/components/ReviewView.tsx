@@ -39,6 +39,7 @@ import { QUEUE_FILTERS } from "../hooks/useReviewQueue";
 import type { LocalSnapshot } from "../types";
 import { Mono, PhaseBadge, ScoreBar, prettyTag } from "./shared";
 import { ReportForm } from "./ReportForm";
+import type { ExplainFn } from "./ExplainCard";
 
 export function ReviewView({
     queue,
@@ -59,8 +60,10 @@ export function ReviewView({
     onExit,
     onOpenUrl,
     onOpenSource,
+    onExplain,
 }: {
     onOpenSource?: (path: string, line: number | null) => void;
+    onExplain?: ExplainFn;
     queue: ReviewQueue;
     profile: ExtensionProfile | null;
     files: FileRefs | null;
@@ -149,6 +152,7 @@ export function ReviewView({
                                 error={submitError}
                                 onOpenUrl={onOpenUrl}
                                 onOpenSource={onOpenSource}
+                                onExplain={onExplain}
                                 readOnly={false}
                                 submitLabel={queue.hasNext ? "Save & next" : "Save & finish"}
                                 footer={

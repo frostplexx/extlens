@@ -20,6 +20,8 @@ export { computeProfile, summarizeManifest } from "./profile.js";
 export type { Backend, GetExtensionResult, HostController } from "./backend.js";
 export { createFolderBackend, discoverExtensions, extensionIdFromPath } from "./folder.js";
 export type { FolderBackendOptions } from "./folder.js";
+export { createExplainer, buildPrompt, diffSources, explainerConfigured, DEFAULT_EXPLAIN_MODEL } from "./explainer.js";
+export type { Explainer, ExplainInput, ExplainerOptions } from "./explainer.js";
 
 export * from "@extlens/protocol";
 export type { ExtensionSource, Manifest, SourceFile } from "@extlens/analyzer";

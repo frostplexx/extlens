@@ -12,8 +12,10 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import {
+  createExplainer,
   createExtlensServer,
   computeProfile,
+  explainerConfigured,
   type Backend,
   type ExtensionSource,
   type Report,
@@ -123,6 +125,28 @@ function makeBackend(): Backend {
       reports.set(report.extensionId, { ...report, id, createdAt: now, updatedAt: now });
       return id;
     },
+
+    // Only offered with a key in the environment; the SDK answers -32601 otherwise.
+    ...(explainerConfigured()
+      ? {
+          async explainFailure(id: string) {
+            const source = sources.get(id);
+            if (!source) return null;
+            const explainer = createExplainer();
+            const withManifest = (s: ExtensionSource): SourceFile[] => [
+              { path: "manifest.json", type: "other", content: JSON.stringify(s.manifest, null, 2) + "\n" },
+              ...s.files,
+            ];
+            const mv3 = id === "one-ext" ? loadExtension("one-ext-mv3") : null;
+            return explainer.explain({
+              profile: computeProfile(source),
+              report: reports.get(id) ?? null,
+              mv2: withManifest(source),
+              ...(mv3 ? { mv3: withManifest(mv3) } : {}),
+            });
+          },
+        }
+      : {}),
   };
 }
 

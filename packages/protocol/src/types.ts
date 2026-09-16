@@ -22,6 +22,7 @@ import type {
   SurfaceStatusSchema,
   UiSurfaceSchema,
   ExtensionVerdictSchema,
+  ExplainResultSchema,
 } from "./messages.js";
 
 /**
@@ -53,3 +54,4 @@ export type SurfaceStatus = z.infer<typeof SurfaceStatusSchema>;
 export type SurfaceResult = z.infer<typeof SurfaceResultSchema>;
 export type ExtensionVerdict = z.infer<typeof ExtensionVerdictSchema>;
 export type DetectedSurface = { surface: UiSurface; evidence: string };
+export type ExplainResult = z.infer<typeof ExplainResultSchema>;

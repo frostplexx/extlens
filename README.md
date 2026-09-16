@@ -178,6 +178,19 @@ through — one extension at a time, with the queue keeping your place:
 - pages are fetched ahead of the cursor, so a pass runs past page boundaries
   without you noticing there were any
 
+### Why did it fail?
+
+A saved report with a failing verdict gets a **Why did it fail?** card with an
+**Explain** button. The host asks a model to read the report — the per-surface
+results and the reviewer's notes are the centre of the prompt — against both
+manifest summaries and the MV2→MV3 diff, and answers with the likely cause, the
+evidence, and what would fix it. Nothing is stored unless you click **Add to
+notes**, which appends it to the report under an attribution line.
+
+The model runs on the host (`analysis.explain`), not in the page: set
+`ANTHROPIC_API_KEY` where the host runs (`EXTLENS_EXPLAIN_MODEL` picks the
+model). A host without a key says so in the card instead of failing.
+
 ### Code mode
 
 The profile says what the analyzer found; code mode shows the thing it found it

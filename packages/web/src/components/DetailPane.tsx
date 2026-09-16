@@ -27,6 +27,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import type { LocalSnapshot } from "../types";
 import { Mono, PhaseBadge, ScoreBar, SourceLink, prettyTag } from "./shared";
 import { ReportForm } from "./ReportForm";
+import type { ExplainFn } from "./ExplainCard";
 
 const BREAKDOWN_LABELS: [keyof ScoreBreakdown, string][] = [
     ["webRequest", "webRequest"],
@@ -66,7 +67,10 @@ export function DetailPane({
     submitError,
     onOpenUrl,
     onOpenSource,
+    onExplain,
 }: {
+    /** Ask the host's model why a failing report's failure happened. */
+    onExplain?: ExplainFn;
     profile: ExtensionProfile | null;
     files: FileRefs | null;
     report: Report | null;
@@ -205,6 +209,7 @@ export function DetailPane({
                             error={submitError}
                             onOpenUrl={onOpenUrl}
                             onOpenSource={onOpenSource}
+                            onExplain={onExplain}
                             readOnly={!editing}
                             onRequestEdit={() => setEditing(true)}
                         />

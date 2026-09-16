@@ -40,6 +40,7 @@ import { Badge } from "@/components/ui/badge";
 import { propagate } from "@/lib/quick-assessment";
 import { Mono } from "./shared";
 import { SurfaceTable } from "./SurfaceTable";
+import { ExplainCard, type ExplainFn } from "./ExplainCard";
 
 /**
  * Surfaces to ask about, falling back to the manifest summary.
@@ -105,11 +106,14 @@ export function ReportForm({
     footer,
     onOpenUrl,
     onOpenSource,
+    onExplain,
     readOnly = false,
     onRequestEdit,
 }: {
     /** Open a listener's file at its line in Code mode; omitted where that is not wired up. */
     onOpenSource?: (path: string, line: number | null) => void;
+    /** Ask the host's model why the saved report's failure happened; omitted where not wired up. */
+    onExplain?: ExplainFn;
     profile: ExtensionProfile;
     saved: Report | null;
     onSubmit: (draft: ReportDraft) => void;
@@ -141,17 +145,37 @@ export function ReportForm({
      * mis-click costs a second toggle rather than the reviewer's work.
      */
     const snapshot = useRef<SurfaceResult[] | null>(null);
-
+    /**
+     * Text waiting to be appended to the notes once the form is editable.
+     *
+     * "Add to notes" from a read-only form has to open the editor first, and opening the editor
+     * resets the draft (below) — so the text is parked here and applied by that same reset, after
+     * it, rather than raced against it.
+     */
+    const pendingNotes = useRef<string | null>(null);
 
     // A new extension resets the answers and the verification clock; inheriting the previous
     // extension's form would quietly record the wrong thing.
     useEffect(() => {
-        setDraft(initial(profile, saved));
+        const base = initial(profile, saved);
+        const pending = readOnly ? null : pendingNotes.current;
+        pendingNotes.current = null;
+        setDraft(pending ? { ...base, notes: appendNotes(base.notes, pending) } : base);
         setStartedAt(readOnly ? null : Date.now());
         // A snapshot belongs to the extension it was taken from; carrying it across would restore
         // one extension's judgements onto another's form.
         snapshot.current = null;
     }, [profile.id, saved, readOnly]);
+
+    const addToNotes = (text: string) => {
+        if (readOnly) {
+            if (!onRequestEdit) return;
+            pendingNotes.current = text;
+            onRequestEdit();
+            return;
+        }
+        setDraft((d) => ({ ...d, notes: appendNotes(d.notes, text) }));
+    };
 
     const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
         setDraft((d) => {
@@ -300,6 +324,15 @@ export function ReportForm({
                 </div>
             </Field>
 
+            {/* Only a *saved* failing report can be explained: the host reads the report it has,
+                not the answers half-typed here. */}
+            {onExplain && saved && (saved.verdict === "not_working" || saved.verdict === "partially_working") ? (
+                <ExplainCard
+                    extensionId={profile.id}
+                    explain={onExplain}
+                    onAppendNotes={readOnly && !onRequestEdit ? undefined : addToNotes}
+                />
+            ) : null}
 
             <Field>
                 <FieldLabel htmlFor="notes">Notes</FieldLabel>
@@ -393,6 +426,12 @@ function Toggle({
             </label>
         </Item>
     );
+}
+
+/** Notes plus a model's explanation, kept apart and attributed so the next reader knows whose words are whose. */
+export function appendNotes(notes: string, explanation: string): string {
+    const block = `--- model's explanation ---\n${explanation.trim()}`;
+    return notes.trim() ? `${notes.trimEnd()}\n\n${block}` : block;
 }
 
 /** Badge tone for a verdict. Partial is a warning, not a failure — it is the common outcome. */

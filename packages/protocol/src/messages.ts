@@ -404,6 +404,26 @@ export const HostLogResultSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// analysis.explain
+// ---------------------------------------------------------------------------
+
+/**
+ * A model's reading of why a migration failed.
+ *
+ * The verdict says *that* something broke; a reviewer looking at a not_working row still has to
+ * open the diff and work out what. The host has the report, the code, and both manifests — it can
+ * ask a model to do that reading and hand back the paragraph.
+ */
+export const ExplainParamsSchema = z.object({ extensionId: ExtensionIdSchema });
+
+export const ExplainResultSchema = z.object({
+  /** Markdown, a few short paragraphs: the likely cause, the evidence, what would fix it. */
+  explanation: z.string(),
+  /** The model that wrote it, so the paragraph can be weighed and reproduced. */
+  model: z.string(),
+});
+
+// ---------------------------------------------------------------------------
 // Method registry
 // ---------------------------------------------------------------------------
 
@@ -447,6 +467,10 @@ export const MethodsSchema = {
   "host.log": {
     params: HostLogParamsSchema,
     result: HostLogResultSchema,
+  },
+  "analysis.explain": {
+    params: ExplainParamsSchema,
+    result: ExplainResultSchema,
   },
 } as const;
 

@@ -7,7 +7,7 @@
  */
 import * as React from "react";
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
-import type { ReportDraft } from "@extlens/protocol";
+import type { ExplainResult, ReportDraft } from "@extlens/protocol";
 import { ChevronLeft, ChevronRight, PackageOpen, SearchX } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -121,6 +121,12 @@ export function App() {
     );
 
     const exitCode = useCallback(() => setMode(codeFrom), [codeFrom]);
+
+    // Relayed to the host untouched; it is the host that has the model, the report and the code.
+    const explain = useCallback(
+        (extensionId: string) => bridge.call<ExplainResult>("analysis.explain", { extensionId }),
+        [bridge],
+    );
 
     /**
      * Download every saved report.
@@ -288,6 +294,7 @@ export function App() {
                         submitError={submitError}
                         onOpenUrl={openUrl}
                         onOpenSource={openInCode}
+                        onExplain={explain}
                         onExit={() => setMode("browse")}
                     />
                 ) : (
@@ -383,6 +390,7 @@ export function App() {
                                 submitError={submitError}
                                 onOpenUrl={openUrl}
                                 onOpenSource={openInCode}
+                                onExplain={explain}
                             />
                         </aside>
                     </ResizablePanel>

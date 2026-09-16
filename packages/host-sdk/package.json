@@ -27,9 +27,11 @@
     "test": "npm run build && vitest run"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.126.0",
     "@extlens/analyzer": "*",
     "@extlens/protocol": "*",
     "better-sqlite3": "^13.0.3",
+    "diff": "^9.0.0",
     "ws": "^8.18.3",
     "zod": "^3.25.76"
   },

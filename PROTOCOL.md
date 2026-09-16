@@ -366,6 +366,32 @@ LogLine:
 - `ts` is the ISO-8601 capture time, or null when unknown.
 - `stream` is `stdout | stderr`. stderr lines are typically errors.
 
+## Failure explanation (optional)
+
+### analysis.explain
+
+Ask the host's model why the migration of an extension failed, as judged by
+its stored report. Params: `{"extensionId": "abc123"}`.
+
+Result:
+
+```
+{ "explanation": "**Likely cause** — …", "model": "claude-sonnet-5" }
+```
+
+- `explanation` is Markdown, a few short paragraphs: the likely cause, the
+  evidence in the report and the diff, and what would fix it.
+- `model` names the model that wrote it.
+- The prompt is built by the SDK (`createExplainer`) from the stored report —
+  verdict, per-surface results, the reviewer's notes — the manifest summaries of
+  both variants, and a unified diff of the two source trees when the host has
+  both. Hosts gather those inputs; the SDK owns the wording so explanations are
+  comparable across hosts.
+- Hosts without a model answer `-32601`. The SDK's folder mode and the stub
+  offer the method when `ANTHROPIC_API_KEY` is set in the host's environment
+  (`EXTLENS_EXPLAIN_MODEL` overrides the model).
+- Unknown id fails with `404`. A call can take tens of seconds.
+
 ## Documented future methods
 
 The server MUST answer these with `-32601` (method not found) in v1. The
@@ -377,6 +403,7 @@ protocol reserves their names so hosts can detect a newer client.
 
 ## Changelog
 
+- v6 — `analysis.explain`: an optional, model-backed explanation of a failing report, built by the SDK from the report, both manifest summaries and the MV2→MV3 diff. `Backend.explainFailure` is optional; hosts without it answer `-32601`.
 - v5 — `ExtensionLight` gains `hasReport`: true when a report exists for the extension. The client marks migrated (`hasMv3`) and tested (`hasReport`) rows with distinct unicode icons; the tested icon replaces the migrated one.
 - v4 — the report form matches the ExtPorter form: installs, works in MV2, needs login, popup/settings/new-tab working, interesting, and a tri-state overall working verdict (yes/no/could_not_test). Legacy reports survive via field defaults; boolean overallWorking values normalize to the string form.
 - v3 — `host.log` adds incremental structured host logs (`seq`, `ts`, `stream`, `text`) with offset polling. The host lifecycle methods `host.status` / `host.start` / `host.stop` are documented; `host.log` joins them. `HostController.getLog` is optional; the SDK returns an empty result when a host omits it.

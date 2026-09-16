@@ -1,4 +1,5 @@
 import type {
+  ExplainResult,
   ReportRow,
   FileRefs,
   HostLogResult,
@@ -77,4 +78,15 @@ export interface Backend {
 
   /** Optional host lifecycle controller (migration start/stop/status). */
   host?: HostController;
+
+  /**
+   * Explain, in prose, why the migration of this extension failed.
+   *
+   * Optional: it needs a model, and a host without one answers -32601 so the client can say so
+   * rather than pretend. The SDK ships `createExplainer` (explainer.ts) to build the prompt from
+   * the report, the profile and the two source trees; a host only has to gather those and pass
+   * them in. The report is the centre of it — the reviewer's surface results and notes are what
+   * the model is asked to account for.
+   */
+  explainFailure?(extensionId: string): Promise<ExplainResult | null>;
 }

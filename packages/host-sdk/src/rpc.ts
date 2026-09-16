@@ -161,6 +161,16 @@ export async function dispatch(backend: Backend, request: RpcRequest): Promise<R
           : { lines: [], nextOffset: offset };
         break;
       }
+      case "analysis.explain": {
+        if (!backend.explainFailure) {
+          throw new RpcError(ErrorCodes.METHOD_NOT_FOUND, "this host has no model configured to explain failures");
+        }
+        const { extensionId } = params as { extensionId: string };
+        const explained = await backend.explainFailure(extensionId);
+        if (!explained) throw new RpcError(ErrorCodes.UNKNOWN_EXTENSION, `unknown extension id: ${extensionId}`);
+        result = explained;
+        break;
+      }
     }
 
     return { result: validateResult(request.method as MethodName, result) };
