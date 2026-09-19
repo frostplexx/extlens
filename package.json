@@ -12,7 +12,6 @@
     "test": "vitest run",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "build": "npm run build --workspace packages/host-sdk",
-    "client": "npm run dev --workspace packages/client",
     "web": "npm run serve --workspace packages/web --",
     "web:dev": "npm run dev --workspace packages/web"
   },

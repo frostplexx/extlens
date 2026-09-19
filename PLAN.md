@@ -1,5 +1,8 @@
 # Plan: extlens — extension analysis + review client
 
+> Historical design document. The ink terminal client it describes was built and later removed
+> in favour of the web UI (see README.md); the protocol, SDK and analyzer sections still apply.
+
 ## Overview
 
 extlens is a standalone, protocol-first tool for analyzing and reviewing Chrome extensions.

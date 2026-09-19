@@ -2,29 +2,27 @@
 
 ## Verify on your machine (the sandbox cannot run browsers, docker, or git in host repos)
 
-- [ ] Verify the browser extension load fix — commit `1dc1699` removes playwright's default `--disable-extensions`; the analyzer tab launch (`l`/`d`) must show the extension icon and `loaded as <id>` (packages/client/src/browsers/manager.ts)
+- [ ] Verify the browser extension load fix — commit `1dc1699` removes playwright's default `--disable-extensions`; Launch must show the extension icon and `loaded as <id>` (packages/session/src/browsers/manager.ts)
 - [ ] Verify `host.start`/`host.stop` end-to-end — `running` → `preparing` → `migrating` → `verifying` → `done`; stop mid-migration → `stopped` (npm converts SIGTERM to exit 1, so the controller trusts the stop flag — src/extlens/migrator.ts in AgenticMigrator)
 - [ ] Verify `--source-dir` unmigrated listing — corpus dir and single extension dir; `hasMv3: false`, read-only (`reports.submit` rejects)
-- [ ] Verify backspace/Delete in explorer search and report notes — ink maps macOS `\x7f` to `key.delete`
 - [ ] Verify the missing-browser prompt downloads Chrome for Testing into `EXTLENS_BROWSER_DIR`
 - [ ] Verify the explorer list loads when the connection becomes ready — refetch-on-connect
 - [ ] Verify MV2 Chrome for Testing 116.0.5845.96 loads MV2 without enterprise policy
-- [ ] Verify SSH key auth — `npm run client -- --ssh <alias>` starts the TUI without a
-  prompt, the analyzer launches browsers from cached files, and `ssh -O exit` tears the
-  master down on quit (packages/client/src/ssh.ts)
-- [ ] Verify SSH password auth — the prompt appears before the TUI; the tunnel connects
-  after entry; downloads do not re-prompt
+- [ ] Verify SSH key auth — `npm run web -- --ssh <alias>` starts the server without a
+  prompt, Launch opens browsers from cached files, and `ssh -O exit` tears the
+  master down on exit (packages/session/src/ssh.ts)
+- [ ] Verify SSH password auth — the prompt appears in the server's terminal before any
+  tab connects; the tunnel connects after entry; downloads do not re-prompt
 - [ ] Verify the SSH session against a jump-host alias and against a `file://` ref
   (mv2 as a manifest.json file, mv3 as a directory)
 - [ ] Verify `extensions.list` pagination at scale — the SDK rejects a page over 200
   rows (`Too many items`), the client requests one screen per page, and search is
-  debounced (packages/protocol/src/messages.ts, packages/client/src/app.tsx)
-- [ ] Verify host lifecycle UI — `m` starts a migration for the selected source row
-  (top bar shows `running <id> (<phase>)`), `m` again stops it, the list refetches
-  when the job ends, and hosts without a HostController hide the segment
-  (packages/client/src/app.tsx)
+  debounced (packages/protocol/src/messages.ts, packages/web/src/hooks/useExtensions.ts)
+- [ ] Verify host lifecycle UI — Migrate all starts a batch (top bar shows progress and an
+  ETA), Stop stops it, the list refetches when the job ends, and hosts without a
+  HostController hide the controls (packages/web/src/hooks/useHostJob.ts)
 - [ ] Verify folder mode — `node packages/host-sdk/bin/extlens.mjs serve <corpus>`
-  then connect the client; first connect indexes, later connects are fast; search
+  then open the web UI; first connect indexes, later connects are fast; search
   and sort run host-side; reports persist across restarts; `--db PATH` moves the
   sqlite file (packages/host-sdk/src/folder.ts)
 - [ ] Verify better-sqlite3 installs on your machine — the sandbox installed it

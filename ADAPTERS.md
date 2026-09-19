@@ -1,7 +1,7 @@
 # ADAPTERS.md — embedding the extlens SDK in a host
 
 extlens is protocol-first. A host project (ExtPorter, AgenticMigrator, or anything
-else) embeds `extlens-sdk`, implements one interface, and the ink client can
+else) embeds `extlens-sdk`, implements one interface, and the web UI can
 browse, analyze, and review its extensions. The host never talks to the client
 directly; the SDK serves the protocol from PROTOCOL.md over one WebSocket.
 
