@@ -2,14 +2,13 @@ import { createWriteStream, existsSync, readFileSync } from "node:fs";
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
+import { browserDir } from "./config.js";
 
 /**
  * Chrome for Testing install. When a browser is missing, the client offers to
- * download the matching Chrome for Testing build and cache it under
- * EXTLENS_BROWSER_DIR (default /tmp/extlens) so the analyzer can launch it.
+ * download the matching Chrome for Testing build and cache it under the
+ * configured browser dir (default /tmp/extlens) so the analyzer can launch it.
  */
-
-export const BROWSER_DIR = process.env.EXTLENS_BROWSER_DIR ?? process.env.EXLENS_BROWSER_DIR ?? "/tmp/extlens";
 
 const KNOWN_GOOD_URL =
   "https://googlechromelabs.github.io/chrome-for-testing/known-good-versions-with-downloads.json";
@@ -91,9 +90,9 @@ export async function fetchChromeDownload(label: "mv2" | "mv3"): Promise<ChromeD
   return { version: pinned.version, platform: build.platform, url: build.url, zip: buildZip(build.url) };
 }
 
-/** Cached install for a label, or null. Reads /tmp/extlens/<label>/path.txt. */
+/** Cached install for a label, or null. Reads <browser dir>/<label>/path.txt. */
 export function installedExecutable(label: "mv2" | "mv3"): string | null {
-  const cachePath = join(BROWSER_DIR, label, "path.txt");
+  const cachePath = join(browserDir(), label, "path.txt");
   if (!existsSync(cachePath)) return null;
   const path = readFileSync(cachePath, "utf8").trim();
   return path && existsSync(path) ? path : null;
@@ -183,9 +182,9 @@ export async function installChrome(
   if (cached) return cached;
 
   const download = await fetchChromeDownload(label);
-  const dir = join(BROWSER_DIR, label);
+  const dir = join(browserDir(), label);
   await mkdir(dir, { recursive: true });
-  const zipPath = join(BROWSER_DIR, `chrome-${label}-${download.version}.zip`);
+  const zipPath = join(browserDir(), `chrome-${label}-${download.version}.zip`);
   await downloadFile(download.url, zipPath, onProgress);
 
   const installRoot = join(dir, download.version);
@@ -198,6 +197,6 @@ export async function installChrome(
 
 export function missingBrowserMessage(label: "mv2" | "mv3"): string {
   return label === "mv2"
-    ? "no MV2-capable chrome found (CHROME_OLD unset or missing)"
-    : "no chrome found (CHROME_LATEST unset and no bundled chromium)";
+    ? "no MV2-capable chrome found (none configured or installed)"
+    : "no chrome found (none configured, installed, or bundled)";
 }

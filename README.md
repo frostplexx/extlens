@@ -1,7 +1,7 @@
 # extlens — extension analysis + review toolchain
 
 extlens is a protocol-first tool for analyzing and reviewing Chrome extensions.
-A local web UI connects over WebSocket to any host that embeds the `extlens-sdk`.
+A desktop app (Electron) connects over WebSocket to any host that embeds the `extlens-sdk`.
 The SDK serves a documented JSON-RPC protocol (PROTOCOL.md) and computes
 profiles with a pure analyzer. The client never touches host storage.
 
@@ -11,9 +11,10 @@ profiles with a pure analyzer. The client never touches host storage.
   breakdown, feature tags, listener extraction, size.
 - `extlens-sdk`: WebSocket JSON-RPC server, `Backend` interface, default
   profile computation, protocol validation.
-- Web UI (`npm run web`): a local React + Tailwind page (shadcn/ui components)
-  served by a node process that keeps the browser launching. Dense sortable
-  table, detail pane, real form controls, collapsible host log.
+- Desktop app (`npm run desktop`): an Electron app — a React + Tailwind page
+  (shadcn/ui components) in a window, with the main process owning the host
+  link and the test browsers. Dense sortable table, detail pane, real form
+  controls, collapsible host log, and a settings page (host, browsers, keychain).
 - A real adapter: AgenticMigrator (`src/extlens/` in that repo) serves its
   `run/` outputs.
 - Folder mode: `extlens serve <folder>` ingests a plain directory of
@@ -21,8 +22,9 @@ profiles with a pure analyzer. The client never touches host storage.
 - Batch migration: AgenticMigrator's CLI auto-detects a corpus
   (`migrate ./corpus --out ./mv3-output`) and migrates every MV2 source into
   one output root.
-- SSH mode: the web server tunnels the WebSocket to a remote host and proxies
-  its file refs, so a remote AgenticMigrator host works like a local one.
+- SSH mode: the app tunnels the WebSocket to a remote host and proxies its
+  file refs, so a remote AgenticMigrator host works like a local one. Passwords
+  can be remembered in the OS keychain.
 
 ## Quickstart
 
@@ -62,20 +64,23 @@ npx tsx src/cli.ts <extension-dir> --no-server
 
 (`npm run cli -- ...` also works — npm needs the `--` before flags.)
 
-Then start the web UI (see below):
+Then build and start the app (see below):
 
 ```sh
-npm run web -- --ws ws://localhost:8081
+npm run desktop:build   # once
+npm run desktop -- --ws ws://localhost:8081
 ```
 
 Or against a remote host over SSH (the host must already run on the remote):
 
 ```sh
-npm run web -- --ssh myserver
-npm run web -- --ssh user@host --remote-port 8081
+npm run desktop -- --ssh myserver
+npm run desktop -- --ssh user@host --remote-port 8081
 ```
 
-Environment:
+Flags are optional: the app remembers the last host, and the settings page changes it.
+
+Environment (all optional; the settings page overrides the browser ones):
 
 - `EXTLENS_WS` — host URL (default `ws://localhost:8081`), or `--ws` flag
 - `EXTLENS_SSH` — ssh destination (`user@host` or an `~/.ssh/config` alias),
@@ -88,45 +93,44 @@ Environment:
   (default `/tmp/extlens`)
 
 When a browser is missing, the detail pane asks whether to download Chrome
-for Testing and installs it under `EXTLENS_BROWSER_DIR`. MV2 gets Chrome 116
-(the last build that loads MV2 extensions); MV3 gets the latest stable build.
+for Testing and installs it under the browser dir. MV2 gets Chrome 116 (the
+last build that loads MV2 extensions); MV3 gets the latest stable build. The
+settings page can set the executables and the dir explicitly, and download
+either browser ahead of time.
 
-## Web UI
+## Desktop app
 
 ```sh
-npm run web                              # build, serve, print a tokenised localhost URL
-npm run web -- --ssh daniel@10.0.0.5     # same, against a remote host
+npm run desktop:build                      # renderer + main; needed once, and after source changes
+npm run desktop                            # launch what is built
+npm run desktop -- --ssh daniel@10.0.0.5   # launch already pointed at a remote host
+npm run desktop:dev                        # vite with HMR + electron against it; no build step
+npm run desktop:pack                       # unpacked app bundle under packages/desktop/release
 ```
 
-Flags after `--` reach the server: `--ws`, `--ssh`, `--remote-port`, `--port`
-(default 8090).
+Flags after `--` reach the app: `--ws`, `--ssh`, `--remote-port`. Without
+them the app reconnects to the last host it was pointed at; the host is
+changed on the settings page (the top-bar host indicator goes there).
 
-The printed URL includes a one-off token; the server binds `127.0.0.1` and
-rejects any bridge connection without it.
-
-The page cannot spawn processes; the node server that serves it does:
+The page cannot spawn processes; the main process does:
 
 ```
-browser tab ──ws──► node server ──ws (or ssh -L)──► extlens host
-                        └──► playwright ──► Chrome for Testing (MV2 / MV3)
+renderer ──ipc──► main process ──ws (or ssh -L)──► extlens host
+                       └──► playwright ──► Chrome for Testing (MV2 / MV3)
 ```
 
-That is why a web UI can still launch the test browsers: the process serving the
-page is the one that runs the ssh tunnel and downloads remote file refs. Methods starting `local.*`
-are handled by that process; everything else is relayed to the host untouched,
-so the web UI adds nothing to the protocol.
+Methods starting `local.*` are handled by the main process — browsers, source
+files, the connection, settings; everything else is relayed to the host
+untouched, so the app adds nothing to the protocol. The renderer reaches main
+through one preload function (`window.extlens.call`) and one event channel; it
+has no node access.
 
-Browser state (launching, loaded, download progress) is pushed to every open tab
-rather than polled, because it changes on the server's schedule — a download
+Browser state (launching, loaded, download progress) is pushed to the page
+rather than polled, because it changes on the process's schedule — a download
 progressing, or Chrome being closed by hand.
 
-`EXTLENS_WEB_TOKEN` pins the token instead of generating one per run. With
-`--ssh`, the password prompt appears in the terminal running the server, before
-any tab connects.
-
-For UI development, `npm run web:dev` runs vite on :5173 with HMR; keep
-`npm run start --workspace packages/web` running alongside it for the bridge,
-and open the :5173 page with the same `?token=` query.
+The renderer is served on its own `app://` scheme with a CSP, not from
+`file://`; the top bar is the window's title bar (native chrome is hidden).
 
 ### The verification form
 
@@ -202,22 +206,27 @@ the queue.
 
 ## SSH mode
 
-With `--ssh`, the web server uses the system `ssh` binary to reach the remote
+For an ssh target, the app uses the system `ssh` binary to reach the remote
 host. It forwards the WebSocket through an `ssh -L` tunnel and downloads the
 `extensions.files` refs into a local cache before the browser launches. It
 spawns OpenSSH, so `~/.ssh/config` aliases, jump hosts, host-key
 verification, key auth, and password auth all work as they do with plain
 `ssh`.
 
-A password prompt appears in the terminal running the server, before any tab
-connects. Key auth needs no prompt. One control master serves the tunnel and
-the file downloads, so nothing re-prompts mid-session. The server tears the
+Key auth needs no prompt. When ssh wants a password, the app shows a modal prompt;
+the password goes to ssh through an askpass helper and is never written
+anywhere in the clear. Ticking "remember" stores it with Electron's
+`safeStorage` — encrypted under a key the OS keychain holds (login Keychain on
+macOS, DPAPI on Windows, secret service on Linux) — and only once the tunnel
+has actually come up with it, so a wrong password is never saved. The settings
+page lists saved hosts and forgets them. One control master serves the tunnel
+and the file downloads, so nothing re-prompts mid-session; the app tears the
 master down on exit.
 
-If the tunnel drops, the server reconnects automatically. Key auth reconnects
-silently. Password auth re-prompts for the password. The forward is
-re-established on the same port, so the WebSocket client reconnects against one
-URL. Stop the server to stop the retry loop.
+If the tunnel drops, the app reconnects automatically. Key auth and a
+remembered password reconnect silently; otherwise the dialog reappears. The
+forward is re-established on the same port, so the WebSocket client reconnects
+against one URL. Changing the host in the dialog stops the retry loop.
 
 ## Repo layout
 
@@ -226,8 +235,8 @@ packages/protocol   — zod schemas + types; the single source of truth for the 
 packages/analyzer   — pure analysis functions (no dependencies)
 packages/host-sdk   — extlens-sdk: ws server, Backend contract, profile computation
 packages/session    — node-side session: ws client, ssh tunnel, Chrome for Testing control
-packages/web        — local web UI: react + vite + tailwind page, plus the node server
-                      that serves it and owns the browsers
+packages/desktop    — the Electron app: renderer (react + vite + tailwind), main process
+                      (host link, browsers, settings, keychain), preload
 examples/           — stub host server over the fixtures
 fixtures/           — synthetic extensions with hand-computed golden scores
 ```
@@ -235,18 +244,22 @@ fixtures/           — synthetic extensions with hand-computed golden scores
 `packages/session` holds the node-side work of driving a host and driving local
 browsers — the ws client, the ssh tunnel, the reconnect logic and the Chrome for
 Testing launch. It has no UI framework and no rendering, so a front end other
-than the web page (the ink terminal client this repo once had) can reuse it
+than this one (the ink terminal client this repo once had) can reuse it
 unchanged.
 
-### Web architecture
+### Desktop architecture
 
 ```
-packages/web/server/index.ts   — http + ws, static serving, token check, host link
-packages/web/server/bridge.ts  — local.* methods: browser launch/close, download prompts
-packages/web/src/bridge.ts     — the page's socket: RPC promises + pushed events
-packages/web/src/hooks/*.ts    — useBridge, useExtensions, useProfile, useHostJob
-packages/web/src/components/*  — table, detail pane, report form, log dock (presentational)
-packages/web/src/components/ui — shadcn/ui components, generated; do not hand-edit
+packages/desktop/src/main/index.ts       — window, app:// scheme, ipc, native pickers
+packages/desktop/src/main/core.ts        — the process's behaviour: host link, ssh password flow,
+                                           settings; testable without Electron
+packages/desktop/src/main/bridge.ts      — local.* methods: browser launch/close, downloads, source
+packages/desktop/src/main/credentials.ts — safeStorage-backed keychain vault
+packages/desktop/src/preload/index.ts    — window.extlens: call + on, nothing else
+packages/desktop/src/renderer/bridge.ts  — the page's side of that
+packages/desktop/src/renderer/hooks/*    — useBridge, useExtensions, useProfile, useHostJob
+packages/desktop/src/renderer/components — table, detail pane, report form, log dock, settings, connection
+packages/desktop/src/renderer/components/ui — shadcn/ui components, generated; do not hand-edit
 ```
 
 The table is TanStack Table over shadcn's `table` primitives, in manual sorting

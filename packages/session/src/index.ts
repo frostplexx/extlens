@@ -9,7 +9,9 @@
 export { ExtlensClient } from "./api.js";
 export { createSshManager, parseSshSpec } from "./ssh.js";
 export type { SshManager, SshSession, SshSpec, TunnelStatus } from "./ssh.js";
-export { BrowserManager, resolveExecutable } from "./browsers/manager.js";
-export { BROWSER_DIR, installChrome, missingBrowserMessage } from "./browsers/install.js";
+export { BrowserManager } from "./browsers/manager.js";
+export { browserConfig, browserDir, resolveExecutable, resolveExecutableDetailed, setBrowserConfig } from "./browsers/config.js";
+export type { BrowserConfig, ExecutableSource, ResolvedExecutable } from "./browsers/config.js";
+export { installChrome, installedExecutable, missingBrowserMessage } from "./browsers/install.js";
 export { detectExtensionLoad } from "./browsers/load-status.js";
 export type { BrowserPhase, BrowserState, ConnectionStatus } from "./types.js";

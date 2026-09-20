@@ -1,14 +1,13 @@
-import { existsSync } from "node:fs";
 import { chromium, type BrowserContext } from "playwright";
 import { detectExtensionLoad } from "./load-status.js";
-import { installedExecutable } from "./install.js";
+import { missingBrowserMessage } from "./install.js";
 import type { BrowserState } from "../types.js";
 
 /**
- * Dual-browser review flow. MV2 uses CHROME_OLD (a Chromium build that still
- * supports MV2, e.g. Chrome 109); MV3 uses CHROME_LATEST or playwright's
- * bundled chromium. Browsers launch visible with --load-extension so the
- * reviewer can exercise the extension by hand.
+ * Dual-browser review flow. MV2 uses a Chromium build that still supports MV2
+ * (e.g. Chrome 116); MV3 uses a current one or playwright's bundled chromium —
+ * see config.ts for where each comes from. Browsers launch visible with
+ * --load-extension so the reviewer can exercise the extension by hand.
  */
 
 export interface BrowserLaunchSpec {
@@ -33,21 +32,6 @@ const V0_FLAGS = [
   "--use-mock-keychain",
 ];
 
-export function resolveExecutable(label: "mv2" | "mv3"): string | null {
-  const fromEnv = label === "mv2" ? process.env.CHROME_OLD : process.env.CHROME_LATEST;
-  if (fromEnv && existsSync(fromEnv)) return fromEnv;
-  const installed = installedExecutable(label);
-  if (installed) return installed;
-  // MV3 falls back to playwright's bundled chromium; MV2 cannot (recent
-  // chromium builds no longer load MV2 extensions). A missing result means
-  // the app offers to download Chrome for Testing.
-  if (label === "mv3") {
-    const bundled = chromium.executablePath();
-    return bundled && existsSync(bundled) ? bundled : null;
-  }
-  return null;
-}
-
 export class BrowserManager {
   /** Live contexts, labelled, so a page can be opened in each and reported per browser. */
   private contexts: { label: "mv2" | "mv3"; context: BrowserContext }[] = [];
@@ -61,7 +45,7 @@ export class BrowserManager {
     if (!spec.executable) {
       setState({
         phase: "failed",
-        message: `no ${spec.label === "mv2" ? "CHROME_OLD" : "CHROME_LATEST / bundled chromium"} — set CHROME_OLD (MV2 needs a Chromium build that still supports MV2)`,
+        message: missingBrowserMessage(spec.label),
         extensionId: null,
       });
       return;

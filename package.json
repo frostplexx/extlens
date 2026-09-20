@@ -12,8 +12,11 @@
     "test": "vitest run",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "build": "npm run build --workspace packages/host-sdk",
-    "web": "npm run serve --workspace packages/web --",
-    "web:dev": "npm run dev --workspace packages/web"
+    "desktop": "npm run start --workspace packages/desktop --",
+    "desktop:build": "npm run build --workspace packages/desktop",
+    "desktop:dev": "npm run dev --workspace packages/desktop",
+    "desktop:pack": "npm run pack --workspace packages/desktop",
+    "desktop:dist": "npm run dist --workspace packages/desktop"
   },
   "devDependencies": {
     "tsx": "^4.19.2",
