@@ -16,10 +16,12 @@ import { SURFACE_HINTS, SURFACE_LABELS } from "@extlens/protocol";
 // Subpaths, not the package barrel: the barrel reaches node:crypto and cannot be bundled.
 import { probeUrls } from "@extlens/analyzer/match-patterns";
 import { listenersBySurface } from "@extlens/analyzer/surfaces";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Timer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CircleSlash, CheckCircle2, CircleAlert, XCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Kbd, KbdHint } from "@/components/ui/kbd";
+import { useHotkeys } from "@/lib/hotkeys";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { SourceLink } from "./shared";
@@ -45,7 +47,16 @@ export function SurfaceTable({
     onOpenSource,
     listeners = [],
     readOnly = false,
+    focused = null,
+    onFocusRow,
+    hotkeys = false,
 }: {
+    /** The row the number keys judge, when the form is being driven from the keyboard. */
+    focused?: UiSurface | null;
+    /** Clicking a row moves the keyboard cursor there, so mouse and keys agree on "this one". */
+    onFocusRow?: (surface: UiSurface) => void;
+    /** Show the key hints, and let `t` start the idle timer. The form binds the rest. */
+    hotkeys?: boolean;
     /** Open a listener's file at its line in Code mode; omitted where that is not wired up. */
     onOpenSource?: (path: string, line: number | null) => void;
     detected: DetectedSurface[];
@@ -76,12 +87,24 @@ export function SurfaceTable({
          * aside and in the wide review column, and which of those it is in has nothing to do with
          * the window size. Labels appear when the table itself has room for them.
          */
-        <div className="@container divide-y rounded-md border">
+        <div className="@container divide-y overflow-hidden rounded-md border">
             {detected.map(({ surface, evidence }) => {
                 const result = results.find((r) => r.surface === surface);
                 const status = result?.status ?? "untested";
+                const isFocused = focused === surface;
                 return (
-                    <div key={surface} className="space-y-2 p-3">
+                    <div
+                        key={surface}
+                        onClick={() => onFocusRow?.(surface)}
+                        className={cn(
+                            // The rule is always there, transparent when the row is not the one:
+                            // a border that appears on focus shifts every line in the row by its
+                            // width, and a form that twitches as the cursor moves is worse than one
+                            // with no cursor.
+                            "space-y-2 border-l-2 border-l-transparent p-3 transition-colors",
+                            isFocused && "border-l-primary bg-secondary/30",
+                        )}
+                    >
                         {/* Stacked until the row is wide enough to hold both: at narrow widths the
                             status buttons used to overlap the surface name. */}
                         <div className="flex flex-col gap-2 @4xl:flex-row @4xl:items-start @4xl:justify-between @4xl:gap-3">
@@ -102,6 +125,7 @@ export function SurfaceTable({
                                 {surface === "page_interaction" ? (
                                     <PageTargets matches={contentScriptMatches} onOpenUrl={onOpenUrl} />
                                 ) : null}
+                                {surface === "background" ? <IdleTimer hotkey={hotkeys} /> : null}
                                 {/* The events this surface runs on. Not rows to judge — you cannot
                                     watch a listener fire — but the concrete things to trigger. */}
                                 {(bySurface.get(surface) ?? []).length > 0 ? (
@@ -128,7 +152,7 @@ export function SurfaceTable({
                                 ) : null}
                             </div>
                             <div className="flex flex-wrap gap-1 @4xl:shrink-0 @4xl:flex-nowrap">
-                                {STATUSES.map(({ value, label, icon: Icon, tone }) => (
+                                {STATUSES.map(({ value, label, icon: Icon, tone }, i) => (
                                     <Tooltip key={value}>
                                         <TooltipTrigger asChild>
                                             <button
@@ -153,9 +177,22 @@ export function SurfaceTable({
                                                 {/* Five near-identical glyphs are a poor target for
                                                     something clicked hundreds of times in a pass. */}
                                                 <span>{label}</span>
+                                                {/* On every row, so the buttons never move as the
+                                                    cursor does; lit only where the key will land. */}
+                                                {hotkeys ? (
+                                                    <KbdHint className={cn(!isFocused && "opacity-30")}>{i + 1}</KbdHint>
+                                                ) : null}
                                             </button>
                                         </TooltipTrigger>
-                                        <TooltipContent>{label}</TooltipContent>
+                                        <TooltipContent>
+                                            {label}
+                                            {hotkeys ? (
+                                                <>
+                                                    {" "}
+                                                    <Kbd>{i + 1}</Kbd> on the highlighted row
+                                                </>
+                                            ) : null}
+                                        </TooltipContent>
                                     </Tooltip>
                                 ))}
                             </div>
@@ -219,6 +256,53 @@ function PageTargets({ matches, onOpenUrl }: { matches: string[]; onOpenUrl?: (u
                     </span>
                 ),
             )}
+        </div>
+    );
+}
+
+/**
+ * How long Chrome waits before stopping an idle MV3 service worker. The hint says "~30s"; this
+ * is what the timer counts, so the two must agree.
+ */
+const IDLE_SECONDS = 30;
+
+/**
+ * A countdown for the "survives idle" check. The wait is the whole test, and a reviewer who
+ * guesses at 30 seconds — or wanders off and comes back at 20 — has not run it. Counting it down
+ * here makes the pass the same length every time, and says when it is over.
+ */
+function IdleTimer({ hotkey = false }: { hotkey?: boolean }) {
+    // null: not started. 0: elapsed. Otherwise seconds remaining.
+    const [remaining, setRemaining] = React.useState<number | null>(null);
+
+    React.useEffect(() => {
+        if (remaining === null || remaining === 0) return;
+        const id = window.setTimeout(() => setRemaining(remaining - 1), 1000);
+        return () => window.clearTimeout(id);
+    }, [remaining]);
+
+    const running = remaining !== null && remaining > 0;
+    const start = () => setRemaining(IDLE_SECONDS);
+    useHotkeys(hotkey && !running, { t: start });
+
+    return (
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+            <Button
+                size="sm"
+                variant="outline"
+                className="h-6 px-2 text-xs font-normal tabular-nums"
+                title={`Count down ${IDLE_SECONDS}s of idle time, then use the surface again`}
+                disabled={running}
+                onClick={start}
+            >
+                <Timer className="size-3" />
+                {running ? `${remaining}s` : `Start ${IDLE_SECONDS}s timer`}
+                {hotkey && !running ? <KbdHint>t</KbdHint> : null}
+            </Button>
+            {running ? <span className="text-xs text-muted-foreground">Leave that browser alone…</span> : null}
+            {remaining === 0 ? (
+                <span className="text-xs text-green">Idle long enough — use the surface again now.</span>
+            ) : null}
         </div>
     );
 }

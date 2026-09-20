@@ -60,6 +60,42 @@ async function pick(parent: BrowserWindow | null, directory: boolean, args: Reco
     return { path: result.canceled ? null : (result.filePaths[0] ?? null) };
 }
 
+/**
+ * Write the export files into a folder the user picks, and reveal them.
+ *
+ * Not `<a download>` from the renderer: Chromium lets a page start one download without a user
+ * gesture and silently drops the rest, and the click's activation is gone by the time the reports
+ * have been fetched — so only the first of the two files ever arrived, and it landed in whatever
+ * the default download directory was without saying so. Null when the picker is dismissed.
+ */
+async function saveExports(
+    parent: BrowserWindow | null,
+    args: Record<string, unknown>,
+): Promise<{ dir: string | null; files: string[] }> {
+    const files = Array.isArray(args.files) ? args.files : [];
+    const options: Electron.OpenDialogOptions = {
+        title: "Save exported reports",
+        buttonLabel: "Save here",
+        defaultPath: app.getPath("downloads"),
+        properties: ["openDirectory", "createDirectory"],
+    };
+    const result = parent ? await dialog.showOpenDialog(parent, options) : await dialog.showOpenDialog(options);
+    const dir = result.canceled ? null : (result.filePaths[0] ?? null);
+    if (!dir) return { dir: null, files: [] };
+    const written: string[] = [];
+    for (const file of files) {
+        if (!file || typeof file !== "object") continue;
+        const { name, content } = file as { name?: unknown; content?: unknown };
+        if (typeof name !== "string" || typeof content !== "string") continue;
+        // The renderer names the files; the folder is the only thing the user chose.
+        const path = join(dir, name.replace(/[\\/]/g, "_"));
+        await writeFile(path, content, "utf8");
+        written.push(path);
+    }
+    if (written[0]) shell.showItemInFolder(written[0]);
+    return { dir, files: written };
+}
+
 /** Only our own page may call in: the renderer's origin, or vite's in development. */
 function trustedUrl(url: string): boolean {
     return url.startsWith(`${ORIGIN}/`) || (DEV_URL !== null && url.startsWith(DEV_URL));
@@ -101,6 +137,9 @@ async function main(): Promise<void> {
             // Native pickers are the window's, not the core's: they need Electron and a parent.
             if (method === "local.app.pickFile" || method === "local.app.pickDirectory") {
                 return { ok: true, result: await pick(window, method === "local.app.pickDirectory", args) };
+            }
+            if (method === "local.app.saveExports") {
+                return { ok: true, result: await saveExports(window, args) };
             }
             return { ok: true, result: await core.handle(method, args) };
         } catch (error) {

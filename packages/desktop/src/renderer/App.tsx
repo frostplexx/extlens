@@ -17,7 +17,8 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/componen
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { ReportRow } from "@extlens/protocol";
-import { download, exportFilename, reportsToCsv, reportsToJson } from "./lib/export-reports";
+import { exportFilename, reportsToCsv, reportsToJson } from "./lib/export-reports";
+import { isTyping } from "./lib/hotkeys";
 import { useBridge } from "./hooks/useBridge";
 import { useExtensions } from "./hooks/useExtensions";
 import { useHostJob } from "./hooks/useHostJob";
@@ -137,24 +138,32 @@ export function App() {
     );
 
     /**
-     * Download every saved report.
+     * Save every report to a folder the user picks.
      *
-     * Both formats in one click: the CSV is the shape the corpus questions are asked in, and the
-     * JSON keeps what the columns flatten away. Choosing between them at the moment of export is a
-     * decision with no information behind it.
+     * Both formats in one go: the CSV is the shape the corpus questions are asked in, and the JSON
+     * keeps what the columns flatten away. Choosing between them at the moment of export is a
+     * decision with no information behind it. Written by the main process rather than downloaded
+     * from here — a page gets one gesture-less download, and this needs two.
      */
     const exportReports = useCallback(() => {
         setExporting(true);
         bridge
             .call<{ reports: ReportRow[] }>("reports.list")
-            .then((r) => {
+            .then(async (r) => {
                 if (r.reports.length === 0) {
                     toast.info("No reports saved yet");
                     return;
                 }
-                download(exportFilename("csv"), reportsToCsv(r.reports), "text/csv");
-                download(exportFilename("json"), reportsToJson(r.reports), "application/json");
-                toast.success(`Exported ${r.reports.length} report${r.reports.length === 1 ? "" : "s"}`);
+                const saved = await bridge.call<{ dir: string | null; files: string[] }>("local.app.saveExports", {
+                    files: [
+                        { name: exportFilename("csv"), content: reportsToCsv(r.reports) },
+                        { name: exportFilename("json"), content: reportsToJson(r.reports) },
+                    ],
+                });
+                if (!saved.dir) return;
+                toast.success(`Exported ${r.reports.length} report${r.reports.length === 1 ? "" : "s"}`, {
+                    description: saved.dir,
+                });
             })
             .catch((e: Error) => toast.error(e.message))
             .finally(() => setExporting(false));
@@ -202,16 +211,15 @@ export function App() {
         [bridge, mode, queue, list, profile],
     );
 
-    // The keyboard review loop, mirroring the terminal client. Suppressed while typing, since j
-    // and k are also letters.
+    // The keyboard loop. Suppressed while typing, since these are all letters.
+    //
+    // Review mode is left-hand only (a/d rather than [/] or j/k): during a pass the right hand is
+    // on the mouse driving the test browsers. The form's own keys live in ReportForm; browse mode
+    // keeps j/k, where both hands are on the keyboard anyway.
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
             const target = e.target as HTMLElement | null;
-            const typing =
-                target instanceof HTMLInputElement ||
-                target instanceof HTMLTextAreaElement ||
-                target?.getAttribute("role") === "combobox" ||
-                target?.isContentEditable === true;
+            const typing = isTyping(e);
             if (e.key === "/" && !typing) {
                 e.preventDefault();
                 searchRef.current?.focus();
@@ -221,7 +229,7 @@ export function App() {
                 target?.blur();
                 return;
             }
-            if (typing || e.metaKey || e.ctrlKey) return;
+            if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
             // Detours: Escape goes back, and the list keys are left alone so the subject cannot
             // change underneath the editor or the settings form.
             if (mode === "code" || mode === "settings") {
@@ -233,12 +241,15 @@ export function App() {
                 return;
             }
             // Review mode moves through the queue; browse mode moves the table selection.
-            if (mode === "review" && (e.key === "]" || e.key === "j")) {
+            if (mode === "review" && e.key === "d") {
                 e.preventDefault();
                 queue.next();
-            } else if (mode === "review" && (e.key === "[" || e.key === "k")) {
+            } else if (mode === "review" && e.key === "a") {
                 e.preventDefault();
                 queue.previous();
+            } else if (mode === "review" && (e.key === "j" || e.key === "k")) {
+                // Not the table's keys: there is no table, and the form owns the rest.
+                return;
             } else if (e.key === "j" || e.key === "ArrowDown") {
                 e.preventDefault();
                 list.moveSelection(1);

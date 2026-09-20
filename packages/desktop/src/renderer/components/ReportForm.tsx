@@ -19,6 +19,8 @@ import type {
 import { scoreSurfaces, VERDICT_LABELS, verdictFor } from "@extlens/protocol";
 import { Pencil, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { KbdHint } from "@/components/ui/kbd";
+import { useHotkeys } from "@/lib/hotkeys";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemTitle } from "@/components/ui/item";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -109,6 +111,7 @@ export function ReportForm({
     onExplain,
     readOnly = false,
     onRequestEdit,
+    hotkeys = false,
 }: {
     /** Open a listener's file at its line in Code mode; omitted where that is not wired up. */
     onOpenSource?: (path: string, line: number | null) => void;
@@ -134,6 +137,17 @@ export function ReportForm({
      */
     readOnly?: boolean;
     onRequestEdit?: () => void;
+    /**
+     * Drive the form from the keyboard — the review pass only. Every key is on the left half of
+     * the keyboard, because the right hand is on the mouse in the test browsers:
+     *
+     *   w / s      move between surfaces          1 2 3 4   works / partly / broken / can't test
+     *   q e r v    installs / MV2 / account / interesting
+     *   g          write notes (Esc to leave)      f         save and move on
+     *
+     * Not offered in browse mode, where a stray keypress would silently edit a saved report.
+     */
+    hotkeys?: boolean;
 }) {
     const flags = useMemo(() => flagsOf(profile), [profile]);
     const detected = useMemo(() => surfacesToAsk(profile), [profile]);
@@ -226,6 +240,40 @@ export function ReportForm({
             score: summary.score,
         });
 
+    const setSurface = (surface: UiSurface, patch: Partial<SurfaceResult>) =>
+        setDraft((d) => ({
+            ...d,
+            surfaces: d.surfaces.map((r) => (r.surface === surface ? { ...r, ...patch } : r)),
+        }));
+
+    /**
+     * Which surface row the number keys judge. Starts on the first: the common case is judging
+     * them in order, so the first keystroke is a verdict rather than a move.
+     */
+    const [cursor, setCursor] = useState(0);
+    useEffect(() => setCursor(0), [profile.id]);
+    const notesRef = useRef<HTMLTextAreaElement>(null);
+
+    const enabled = hotkeys && !readOnly;
+    const focusedSurface = enabled ? detected[cursor]?.surface ?? null : null;
+    const judge = (status: SurfaceResult["status"]) => {
+        if (focusedSurface) setSurface(focusedSurface, { status });
+    };
+    useHotkeys(enabled, {
+        w: () => setCursor((c) => Math.max(0, c - 1)),
+        s: () => setCursor((c) => Math.min(detected.length - 1, c + 1)),
+        "1": () => judge("working"),
+        "2": () => judge("partial"),
+        "3": () => judge("broken"),
+        "4": () => judge("not_testable"),
+        q: () => set("installs", !draft.installs),
+        e: () => set("worksInMv2", !draft.worksInMv2),
+        r: () => set("needsLogin", !draft.needsLogin),
+        v: () => set("isInteresting", !draft.isInteresting),
+        g: () => notesRef.current?.focus(),
+        f: submitting ? undefined : submit,
+    });
+
     return (
         <FieldGroup>
             {/* Facts about the attempt rather than about a surface. Labelled switches, not a grid
@@ -236,6 +284,7 @@ export function ReportForm({
                 <ItemGroup className="gap-2">
                     <Toggle
                         id="installs"
+                        hotkey={enabled ? "q" : undefined}
                         label="Installs"
                         hint="Chrome accepted it. If not, nothing below is testable."
                         checked={draft.installs}
@@ -244,6 +293,7 @@ export function ReportForm({
                     />
                     <Toggle
                         id="mv2"
+                        hotkey={enabled ? "e" : undefined}
                         label="Worked in MV2"
                         hint="The original worked. If it did not, a failure here says nothing about the migration."
                         checked={draft.worksInMv2}
@@ -252,6 +302,7 @@ export function ReportForm({
                     />
                     <Toggle
                         id="login"
+                        hotkey={enabled ? "r" : undefined}
                         label="Needs an account"
                         hint="Needs a login, a device or a paid service before it can be exercised."
                         checked={draft.needsLogin}
@@ -260,6 +311,7 @@ export function ReportForm({
                     />
                     <Toggle
                         id="interesting"
+                        hotkey={enabled ? "v" : undefined}
                         label="Interesting"
                         hint="Worth coming back to: an unusual failure, or a hard migration done well."
                         checked={draft.isInteresting}
@@ -275,7 +327,17 @@ export function ReportForm({
                 and the score below are computed from them rather than asked for separately —
                 a reviewer who has judged every surface has already given the answer. */}
             <Field>
-                <FieldLabel>User-facing surfaces</FieldLabel>
+                <LabelRow
+                    label="User-facing surfaces"
+                    hint={
+                        enabled ? (
+                            <>
+                                <KbdHint>w</KbdHint>
+                                <KbdHint>s</KbdHint> move · <KbdHint>1</KbdHint>–<KbdHint>4</KbdHint> judge
+                            </>
+                        ) : null
+                    }
+                />
                 <FieldDescription>
                     {propagated ? (
                         <span className="text-peach">
@@ -297,12 +359,10 @@ export function ReportForm({
                     onOpenSource={onOpenSource}
                     listeners={profile.listeners}
                     results={draft.surfaces}
-                    onChange={(surface: UiSurface, patch) =>
-                        setDraft((d) => ({
-                            ...d,
-                            surfaces: d.surfaces.map((r) => (r.surface === surface ? { ...r, ...patch } : r)),
-                        }))
-                    }
+                    onChange={setSurface}
+                    focused={focusedSurface}
+                    onFocusRow={(surface) => setCursor(detected.findIndex((d) => d.surface === surface))}
+                    hotkeys={enabled}
                 />
             </Field>
 
@@ -335,11 +395,22 @@ export function ReportForm({
             ) : null}
 
             <Field>
-                <FieldLabel htmlFor="notes">Notes</FieldLabel>
+                <LabelRow
+                    htmlFor="notes"
+                    label="Notes"
+                    hint={
+                        enabled ? (
+                            <>
+                                <KbdHint>g</KbdHint> write · <KbdHint>esc</KbdHint> leave
+                            </>
+                        ) : null
+                    }
+                />
                 {readOnly ? (
                     <p className="text-sm text-muted-foreground">{draft.notes || "—"}</p>
                 ) : (
                     <Textarea
+                        ref={notesRef}
                         id="notes"
                         rows={3}
                         value={draft.notes}
@@ -367,6 +438,7 @@ export function ReportForm({
                         <Button onClick={submit} disabled={submitting}>
                             {submitting ? <Spinner /> : <Save className="size-4" />}
                             {submitLabel ?? (saved ? "Update report" : "Save report")}
+                            {enabled ? <KbdHint>f</KbdHint> : null}
                         </Button>
                         {footer}
                         <FieldDescription>
@@ -398,6 +470,21 @@ function initial(profile: ExtensionProfile, saved: Report | null): Draft {
     };
 }
 
+/**
+ * A field label with its key hint pushed to the far edge: the label stays a label, and the hint
+ * reads as an annotation of the section rather than as part of its name.
+ */
+function LabelRow({ label, hint, htmlFor }: { label: string; hint: React.ReactNode; htmlFor?: string }) {
+    return (
+        <div className="flex items-baseline justify-between gap-3">
+            <FieldLabel htmlFor={htmlFor}>{label}</FieldLabel>
+            {hint ? (
+                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">{hint}</span>
+            ) : null}
+        </div>
+    );
+}
+
 function Toggle({
     id,
     label,
@@ -405,6 +492,7 @@ function Toggle({
     checked,
     onChange,
     readOnly = false,
+    hotkey,
 }: {
     id: string;
     label: string;
@@ -412,6 +500,8 @@ function Toggle({
     checked: boolean;
     onChange: (value: boolean) => void;
     readOnly?: boolean;
+    /** The key that flips it, shown beside the label; bound by the form, not here. */
+    hotkey?: string;
 }) {
     return (
         <Item variant="outline" size="sm" asChild>
@@ -420,7 +510,9 @@ function Toggle({
                     <ItemTitle>{label}</ItemTitle>
                     <ItemDescription className="hidden lg:block">{hint}</ItemDescription>
                 </ItemContent>
-                <ItemActions>
+                <ItemActions className="gap-3">
+                    {/* Beside the control it flips, in the column the eye is already scanning. */}
+                    {hotkey ? <KbdHint>{hotkey}</KbdHint> : null}
                     <Switch id={id} checked={checked} onCheckedChange={onChange} disabled={readOnly} />
                 </ItemActions>
             </label>

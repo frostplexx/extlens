@@ -73,17 +73,6 @@ export function reportsToJson(rows: ReportRow[]): string {
     return JSON.stringify({ exportedAt: new Date().toISOString(), count: rows.length, reports: rows }, null, 2);
 }
 
-/** Hand the file to the browser. Same-origin blob, so no server round trip. */
-export function download(filename: string, content: string, mime: string): void {
-    const url = URL.createObjectURL(new Blob([content], { type: mime }));
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    link.click();
-    // Revoking immediately can cancel the download in some browsers; a tick is enough.
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
 /** `extlens-reports-2026-09-14.csv` — dated, because exports accumulate. */
 export function exportFilename(extension: "csv" | "json"): string {
     return `extlens-reports-${new Date().toISOString().slice(0, 10)}.${extension}`;

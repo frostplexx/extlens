@@ -154,6 +154,7 @@ export function ReviewView({
                                 onOpenSource={onOpenSource}
                                 onExplain={onExplain}
                                 readOnly={false}
+                                hotkeys
                                 submitLabel={queue.hasNext ? "Save & next" : "Save & finish"}
                                 footer={
                                     <Tooltip>
@@ -164,7 +165,7 @@ export function ReviewView({
                                             </Button>
                                         </TooltipTrigger>
                                         <TooltipContent>
-                                            Move on without recording anything. <Kbd>]</Kbd>
+                                            Move on without recording anything. <Kbd>d</Kbd>
                                         </TooltipContent>
                                     </Tooltip>
                                 }
@@ -246,10 +247,10 @@ function QueueBar({
             <div className="ml-auto flex items-center gap-2">
                 <Button variant="outline" size="sm" onClick={queue.previous} disabled={!queue.hasPrevious}>
                     <ArrowLeft className="size-4" />
-                    <Kbd>[</Kbd>
+                    <Kbd>a</Kbd>
                 </Button>
                 <Button variant="outline" size="sm" onClick={queue.next} disabled={!queue.hasNext}>
-                    <Kbd>]</Kbd>
+                    <Kbd>d</Kbd>
                     <ArrowRight className="size-4" />
                 </Button>
             </div>
@@ -373,7 +374,7 @@ function BrowserBar({
                     Close
                 </Button>
                 <span className="hidden text-xs text-muted-foreground xl:inline">
-                    <Kbd>b</Kbd> launch · <Kbd>x</Kbd> close
+                    <Kbd>b</Kbd> launch · <Kbd>x</Kbd> close · <Kbd>t</Kbd> idle timer
                 </span>
             </div>
 

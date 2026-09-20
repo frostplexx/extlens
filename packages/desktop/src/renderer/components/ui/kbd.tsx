@@ -23,4 +23,24 @@ function KbdGroup({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
-export { Kbd, KbdGroup }
+/**
+ * A key hint sitting inside running text or a control: smaller and quieter than a Kbd, so it
+ * annotates the thing it is next to rather than competing with it.
+ */
+function KbdHint({ className, ...props }: React.ComponentProps<"kbd">) {
+  return (
+    <Kbd
+      data-slot="kbd-hint"
+      className={cn(
+        "h-4 min-w-4 px-1 text-[10px] font-semibold uppercase tracking-wide",
+        // Inherit the tone of a coloured parent (a primary button, a pressed status) instead of
+        // painting a muted block on top of it.
+        "in-[[data-slot=button]]:bg-current/15 in-[[data-slot=button]]:text-inherit",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+export { Kbd, KbdGroup, KbdHint }
