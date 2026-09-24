@@ -9,7 +9,7 @@
  */
 import * as React from "react";
 import type { HostStatus } from "@extlens/protocol";
-import { ClipboardCheck, Cpu, Download, FileCode2, Play, Plug, Settings, Square, Table2, Terminal } from "lucide-react";
+import { ClipboardCheck, Cpu, Download, FileCode2, Play, Plug, ScrollText, Settings, Square, Table2, Terminal } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { estimate } from "@/lib/eta";
 import { Badge } from "@/components/ui/badge";
@@ -145,6 +145,15 @@ export function TopBar({
                 >
                     <FileCode2 className="size-4" />
                     <span className="hidden sm:inline">Code</span>
+                </Button>
+                <Button
+                    size="sm"
+                    variant={mode === "transcript" ? "secondary" : "ghost"}
+                    className={mode === "transcript" ? "bg-background shadow-sm" : ""}
+                    onClick={() => onModeChange("transcript")}
+                >
+                    <ScrollText className="size-4" />
+                    <span className="hidden sm:inline">Transcript</span>
                 </Button>
             </div>
 

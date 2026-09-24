@@ -3,8 +3,11 @@ import type { BrowserState } from "@extlens/session";
 
 export type BrowserLabel = "mv2" | "mv3";
 
-/** What the page is for right now: browsing the corpus, working a review queue, reading code, or settings. */
-export type AppMode = "browse" | "review" | "code" | "settings";
+/**
+ * What the page is for right now: browsing the corpus, working a review queue, reading code,
+ * reading the agent's transcript of a migration, or settings.
+ */
+export type AppMode = "browse" | "review" | "code" | "transcript" | "settings";
 
 export interface DownloadPrompt {
     label: BrowserLabel;

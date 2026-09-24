@@ -15,7 +15,8 @@ profiles with a pure analyzer. The client never touches host storage.
   (shadcn/ui components) in a window, with the main process owning the host
   link and the test browsers. Dense sortable table with a host-side "filter by"
   (verdict, unreviewed, MV3 build), detail pane, real form controls, collapsible
-  host log, and a settings page (host, browsers, keychain).
+  host log, a transcript tab (the migration agent's conversation, tool calls and
+  errors for the selected extension), and a settings page (host, browsers, keychain).
 - A real adapter: AgenticMigrator (`src/extlens/` in that repo) serves its
   `run/` outputs.
 - Folder mode: `extlens serve <folder>` ingests a plain directory of

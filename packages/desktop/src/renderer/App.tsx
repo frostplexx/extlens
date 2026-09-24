@@ -25,11 +25,13 @@ import { useExtensions } from "./hooks/useExtensions";
 import { useHostJob } from "./hooks/useHostJob";
 import { useProfile } from "./hooks/useProfile";
 import { useReviewQueue } from "./hooks/useReviewQueue";
+import { useTranscript } from "./hooks/useTranscript";
 import { DetailPane } from "./components/DetailPane";
 import { ExtensionTable } from "./components/ExtensionTable";
 import { LogDock } from "./components/LogDock";
 import { ReviewView } from "./components/ReviewView";
 import { Toolbar } from "./components/Toolbar";
+import { TranscriptView } from "./components/TranscriptView";
 import { TopBar } from "./components/TopBar";
 import { SecretPromptDialog } from "./components/Connection";
 import { SettingsView } from "./components/SettingsView";
@@ -46,13 +48,13 @@ export function App() {
 
     const [mode, setMode] = useState<AppMode>("browse");
     /**
-     * Code and settings are detours, not destinations: code reads whatever browse or review had
-     * selected, and Back returns to where it was entered from. So the mode that *drives* the
+     * Code, transcript and settings are detours, not destinations: each reads whatever browse or
+     * review had selected, and Back returns to where it was entered from. So the mode that *drives* the
      * subject stays the one underneath, and the review queue is not torn down for reading code
      * or changing a browser path mid-pass.
      */
     const [returnTo, setReturnTo] = useState<"browse" | "review">("browse");
-    const driving = mode === "code" || mode === "settings" ? returnTo : mode;
+    const driving = mode === "code" || mode === "settings" || mode === "transcript" ? returnTo : mode;
     const [codeTarget, setCodeTarget] = useState<CodeTarget | null>(null);
     const [autoLaunch, setAutoLaunch] = useState(true);
 
@@ -69,6 +71,9 @@ export function App() {
      * extension's paths, and a launch in that window opens the wrong extension.
      */
     const readyFiles = profile.loadedId === subjectId ? profile.files : null;
+    // Only fetched while the tab is open: a transcript is the largest thing a host serves, and
+    // prefetching one per selected row would pull megabytes nobody asked to read.
+    const transcript = useTranscript(bridge, subjectId, connected, mode === "transcript");
     const host = useHostJob(bridge, connected, list.refresh);
 
     const [logOpen, setLogOpen] = useState(false);
@@ -120,10 +125,10 @@ export function App() {
     const changeMode = useCallback(
         (next: AppMode) => {
             if (next === "code") openInCode(null, null);
-            else if (next === "settings") {
+            else if (next === "transcript" || next === "settings") {
                 setMode((current) => {
                     if (current === "browse" || current === "review") setReturnTo(current);
-                    return "settings";
+                    return next;
                 });
             } else setMode(next);
         },
@@ -233,12 +238,16 @@ export function App() {
             if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
             // Detours: Escape goes back, and the list keys are left alone so the subject cannot
             // change underneath the editor or the settings form.
-            if (mode === "code" || mode === "settings") {
+            if (mode === "code" || mode === "settings" || mode === "transcript") {
                 if (e.key === "Escape") exitDetour();
                 return;
             }
             if (e.key === "c") {
                 openInCode(null, null);
+                return;
+            }
+            if (e.key === "t") {
+                changeMode("transcript");
                 return;
             }
             // Review mode moves through the queue; browse mode moves the table selection.
@@ -267,7 +276,7 @@ export function App() {
         };
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
-    }, [run, mode, queue, list, readyFiles, subjectId, openInCode, exitDetour]);
+    }, [run, mode, queue, list, readyFiles, subjectId, openInCode, changeMode, exitDetour]);
 
     const empty = list.rows.length === 0 && !list.loading;
     const filtered = !listFilterIsEmpty(list.filter);
@@ -279,7 +288,14 @@ export function App() {
      * shares a resizable split; closed, it is a fixed bar underneath — and the body itself does
      * not care which.
      */
-    const body = mode === "settings" ? (
+    const body = mode === "transcript" ? (
+                    <TranscriptView
+                        transcript={transcript}
+                        subjectId={subjectId}
+                        title={profile.loadedId === subjectId ? (profile.profile?.name ?? null) : null}
+                        onExit={exitDetour}
+                    />
+                ) : mode === "settings" ? (
                     <SettingsView bridge={bridge} onExit={exitDetour} />
                 ) : mode === "code" ? (
                     <Suspense

@@ -502,6 +502,155 @@ export const ExplainResultSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// transcript.get
+// ---------------------------------------------------------------------------
+
+/**
+ * The agent's own record of the migration: what it was asked, what it thought, what it ran, and
+ * what came back — normalized away from whatever agent framework the host happens to run.
+ *
+ * A verdict says the migration failed and an explanation guesses why; the transcript is the only
+ * artefact that says what actually happened. Reading it is how a reviewer tells "the model never
+ * opened the file" from "the model read it and got it wrong" — two failures that produce the same
+ * broken extension and need opposite fixes.
+ *
+ * Normalized at the host, deliberately. Hosts run different agents whose logs agree on nothing;
+ * if the client parsed those directly, the viewer would be a reader for one host's agent and
+ * every other host would show a blank tab. So a host maps its log onto these entries, and the
+ * client renders entries.
+ */
+
+/** One piece of an entry's content. Tool arguments arrive pre-serialized: the client displays them. */
+export const TranscriptBlockSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("text"),
+    text: z.string(),
+    /** The host cut this block to keep the frame sendable; there was more of it. */
+    truncated: z.boolean().default(false),
+  }),
+  z.object({
+    type: z.literal("thinking"),
+    text: z.string(),
+    truncated: z.boolean().default(false),
+  }),
+  z.object({
+    type: z.literal("tool_call"),
+    name: z.string(),
+    /** JSON, already stringified — the client shows it, it does not interpret it. */
+    arguments: z.string(),
+    /** Ties the call to the entry carrying its result, when the agent records one. */
+    callId: z.string().nullable().default(null),
+    truncated: z.boolean().default(false),
+  }),
+]);
+
+/**
+ * What one model call cost.
+ *
+ * Kept per entry rather than only in the summary because the interesting question is usually
+ * *where* a run became expensive — a retry loop against a failing tool looks like nothing in a
+ * total and is obvious in a column.
+ */
+export const TranscriptUsageSchema = z.object({
+  input: z.number().int().min(0).default(0),
+  output: z.number().int().min(0).default(0),
+  cacheRead: z.number().int().min(0).default(0),
+  cacheWrite: z.number().int().min(0).default(0),
+  total: z.number().int().min(0).default(0),
+  /** Null when the host prices nothing; zero is a claim that it was free. */
+  costUsd: z.number().min(0).nullable().default(null),
+});
+
+/**
+ * Who produced an entry. "tool" is the harness answering a call the assistant made — not a
+ * speaker, but it belongs in the sequence or a tool call has no visible consequence.
+ */
+export const TranscriptRoleSchema = z.enum(["user", "assistant", "tool"]);
+
+/**
+ * What an entry is.
+ *
+ * "meta" covers the things a session records about itself (which model, which thinking level) —
+ * worth showing in place, since a model change halfway through a run explains a change in
+ * behaviour that otherwise looks like the model losing the plot. "compaction" is the agent
+ * summarising its own history to fit the window: the entries before it are gone, and a reader who
+ * cannot see that happened will read the summary as the model's own words.
+ */
+export const TranscriptEntryKindSchema = z.enum(["message", "meta", "compaction"]);
+
+export const TranscriptEntrySchema = z.object({
+  /** Position in the whole transcript, so a paged view can be read as one sequence. */
+  index: z.number().int().min(0),
+  /** ISO 8601, or null when the record carried no usable timestamp. */
+  at: z.string().nullable().default(null),
+  kind: TranscriptEntryKindSchema,
+  role: TranscriptRoleSchema.nullable().default(null),
+  blocks: z.array(TranscriptBlockSchema).default([]),
+  /** Tool entries: which tool answered, and whether it failed. */
+  toolName: z.string().nullable().default(null),
+  callId: z.string().nullable().default(null),
+  isError: z.boolean().default(false),
+  /** Assistant entries: which model spoke, and how the turn ended. */
+  model: z.string().nullable().default(null),
+  provider: z.string().nullable().default(null),
+  stopReason: z.string().nullable().default(null),
+  /**
+   * The turn failed outright (a 500, a refused request). Distinct from `isError`, which is a tool
+   * reporting failure: one is the run breaking, the other is the run working as intended.
+   */
+  error: z.string().nullable().default(null),
+  usage: TranscriptUsageSchema.nullable().default(null),
+  /** meta/compaction entries: a short label and its detail, already in the host's words. */
+  label: z.string().default(""),
+  detail: z.string().default(""),
+});
+
+/**
+ * The whole transcript in one line, computed over every entry rather than the page on screen.
+ *
+ * A reader opens a transcript with one of two questions — "what did it cost" and "where did it go
+ * wrong" — and both are answerable before reading a word of it.
+ */
+export const TranscriptSummarySchema = z.object({
+  model: z.string().nullable().default(null),
+  provider: z.string().nullable().default(null),
+  messages: z.number().int().min(0).default(0),
+  toolCalls: z.number().int().min(0).default(0),
+  /** Tool results that came back as failures. */
+  toolErrors: z.number().int().min(0).default(0),
+  /** Turns that failed outright. */
+  errors: z.number().int().min(0).default(0),
+  compactions: z.number().int().min(0).default(0),
+  startedAt: z.string().nullable().default(null),
+  endedAt: z.string().nullable().default(null),
+  usage: TranscriptUsageSchema.nullable().default(null),
+});
+
+export const TranscriptParamsSchema = z.object({
+  extensionId: ExtensionIdSchema,
+  offset: z.number().int().min(0).default(0),
+  /**
+   * Entries per call. Bounded because a long agent run is thousands of entries carrying whole
+   * files; a viewer pages through them rather than waiting for one enormous frame.
+   */
+  limit: z.number().int().min(1).max(500).default(200),
+});
+
+export const TranscriptResultSchema = z.object({
+  /**
+   * False when this host kept no transcript for this extension — an unmigrated source, a run from
+   * before the agent recorded one. Distinct from an empty page, which means you paged past the end.
+   */
+  available: z.boolean(),
+  entries: z.array(TranscriptEntrySchema).max(500),
+  /** Entries in the whole transcript, not in this page. */
+  total: z.number().int().min(0),
+  offset: z.number().int().min(0),
+  limit: z.number().int().min(1).max(500),
+  summary: TranscriptSummarySchema.nullable().default(null),
+});
+
+// ---------------------------------------------------------------------------
 // Method registry
 // ---------------------------------------------------------------------------
 
@@ -549,6 +698,10 @@ export const MethodsSchema = {
   "analysis.explain": {
     params: ExplainParamsSchema,
     result: ExplainResultSchema,
+  },
+  "transcript.get": {
+    params: TranscriptParamsSchema,
+    result: TranscriptResultSchema,
   },
 } as const;
 

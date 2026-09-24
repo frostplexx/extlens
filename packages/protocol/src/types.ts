@@ -21,6 +21,14 @@ import type {
   ReportSchema,
   ScoreBreakdownSchema,
   SortOrderSchema,
+  TranscriptBlockSchema,
+  TranscriptEntrySchema,
+  TranscriptEntryKindSchema,
+  TranscriptRoleSchema,
+  TranscriptSummarySchema,
+  TranscriptUsageSchema,
+  TranscriptParamsSchema,
+  TranscriptResultSchema,
   SurfaceResultSchema,
   SurfaceStatusSchema,
   UiSurfaceSchema,
@@ -61,3 +69,12 @@ export type SurfaceResult = z.infer<typeof SurfaceResultSchema>;
 export type ExtensionVerdict = z.infer<typeof ExtensionVerdictSchema>;
 export type DetectedSurface = { surface: UiSurface; evidence: string };
 export type ExplainResult = z.infer<typeof ExplainResultSchema>;
+
+export type TranscriptBlock = z.infer<typeof TranscriptBlockSchema>;
+export type TranscriptEntry = z.infer<typeof TranscriptEntrySchema>;
+export type TranscriptEntryKind = z.infer<typeof TranscriptEntryKindSchema>;
+export type TranscriptRole = z.infer<typeof TranscriptRoleSchema>;
+export type TranscriptSummary = z.infer<typeof TranscriptSummarySchema>;
+export type TranscriptUsage = z.infer<typeof TranscriptUsageSchema>;
+export type TranscriptParams = z.infer<typeof TranscriptParamsSchema>;
+export type TranscriptResult = z.infer<typeof TranscriptResultSchema>;

@@ -161,6 +161,18 @@ export async function dispatch(backend: Backend, request: RpcRequest): Promise<R
           : { lines: [], nextOffset: offset };
         break;
       }
+      case "transcript.get": {
+        if (!backend.getTranscript) {
+          throw new RpcError(ErrorCodes.METHOD_NOT_FOUND, "this host keeps no agent transcripts");
+        }
+        const params_ = params as { extensionId: string };
+        const transcript = await backend.getTranscript(params as never);
+        if (!transcript) {
+          throw new RpcError(ErrorCodes.UNKNOWN_EXTENSION, `unknown extension id: ${params_.extensionId}`);
+        }
+        result = transcript;
+        break;
+      }
       case "analysis.explain": {
         if (!backend.explainFailure) {
           throw new RpcError(ErrorCodes.METHOD_NOT_FOUND, "this host has no model configured to explain failures");

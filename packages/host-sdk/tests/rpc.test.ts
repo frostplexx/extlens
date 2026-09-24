@@ -82,6 +82,74 @@ describe("extensions.list", () => {
   });
 });
 
+describe("transcript.get", () => {
+  test("says so plainly when the host keeps no transcripts", async () => {
+    // A folder of extensions has no agent. -32601 is what lets the client say that, rather than
+    // rendering an empty conversation as though the agent had said nothing.
+    const res = await call(makeStubBackend(), "transcript.get", { extensionId: "one-ext" });
+    expect(res).toEqual({
+      error: { code: ErrorCodes.METHOD_NOT_FOUND, message: expect.stringContaining("no agent transcripts") },
+    });
+  });
+
+  test("defaults the paging params and returns what the host recorded", async () => {
+    let seen: unknown;
+    const backend = {
+      ...makeStubBackend(),
+      async getTranscript(params: { extensionId: string; offset: number; limit: number }) {
+        seen = params;
+        return {
+          available: true,
+          entries: [
+            {
+              index: 0,
+              at: "2026-08-19T13:10:00.000Z",
+              kind: "message" as const,
+              role: "assistant" as const,
+              blocks: [{ type: "tool_call" as const, name: "ls", arguments: "{}", callId: null, truncated: false }],
+              toolName: null,
+              callId: null,
+              isError: false,
+              model: "a-model",
+              provider: "a-provider",
+              stopReason: "toolCall",
+              error: null,
+              usage: null,
+              label: "",
+              detail: "",
+            },
+          ],
+          total: 1,
+          offset: params.offset,
+          limit: params.limit,
+          summary: null,
+        };
+      },
+    };
+    const res = await call(backend, "transcript.get", { extensionId: "one-ext" });
+    expect(seen).toEqual({ extensionId: "one-ext", offset: 0, limit: 200 });
+    expect(res).toEqual({
+      result: expect.objectContaining({ available: true, total: 1, offset: 0, limit: 200 }),
+    });
+  });
+
+  test("maps an unknown extension to 404, not to an empty transcript", async () => {
+    const backend = { ...makeStubBackend(), async getTranscript() { return null; } };
+    const res = await call(backend, "transcript.get", { extensionId: "nope" });
+    expect(res).toEqual({
+      error: { code: ErrorCodes.UNKNOWN_EXTENSION, message: expect.stringContaining("nope") },
+    });
+  });
+
+  test("rejects a page bigger than the protocol allows", async () => {
+    const backend = { ...makeStubBackend(), async getTranscript() { return null; } };
+    const res = await call(backend, "transcript.get", { extensionId: "one-ext", limit: 5000 });
+    expect(res).toEqual({
+      error: { code: ErrorCodes.INVALID_PARAMS, message: expect.stringContaining("invalid params") },
+    });
+  });
+});
+
 describe("extensions.get", () => {
   test("computes a profile for a known id", async () => {
     const res = await call(makeStubBackend(), "extensions.get", { id: "one-ext" });

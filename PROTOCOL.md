@@ -421,6 +421,78 @@ Result:
   (`EXTLENS_EXPLAIN_MODEL` overrides the model).
 - Unknown id fails with `404`. A call can take tens of seconds.
 
+## Agent transcripts (optional)
+
+### transcript.get
+
+The agent's own record of a migration: the conversation, the tool calls, the failures.
+
+Optional. A host that runs no agent answers `-32601`; a host that runs one but recorded nothing
+for this extension answers with `available: false`. Those are different facts and the client
+words them differently.
+
+Params:
+
+| field       | type   | default | notes                                  |
+|-------------|--------|---------|----------------------------------------|
+| extensionId | string | —       | required                               |
+| offset      | int    | 0       | entries to skip                        |
+| limit       | int    | 200     | 1..500 entries per call                |
+
+Result:
+
+```
+{
+  "available": true,
+  "entries": [ TranscriptEntry, ... ],
+  "total": 128,
+  "offset": 0,
+  "limit": 200,
+  "summary": { "model": "...", "messages": 124, "toolCalls": 54, "toolErrors": 3,
+               "errors": 6, "compactions": 1, "startedAt": "...", "endedAt": "...",
+               "usage": { "input": 0, "output": 0, "total": 0, "costUsd": null } }
+}
+```
+
+- `total` counts the whole transcript, not the page.
+- `summary` is computed over every entry, not the page, so it does not change as a reader pages.
+  Derive it with `summarizeTranscript` (`@extlens/protocol`, re-exported by `extlens-sdk`) rather
+  than counting host-side: a corpus comparison quotes these numbers, and they have to mean the
+  same thing on every host.
+
+TranscriptEntry:
+
+```
+{
+  "index": 0,                       // position in the whole transcript
+  "at": "2026-08-19T13:10:00.000Z", // ISO, or null when the agent logged no usable time
+  "kind": "message",                // message | meta | compaction
+  "role": "assistant",              // user | assistant | tool, null for meta/compaction
+  "blocks": [
+    { "type": "text", "text": "...", "truncated": false },
+    { "type": "thinking", "text": "...", "truncated": false },
+    { "type": "tool_call", "name": "ls", "arguments": "{...}", "callId": "c1", "truncated": false }
+  ],
+  "toolName": null, "callId": null, "isError": false,   // tool entries
+  "model": null, "provider": null, "stopReason": null,  // assistant entries
+  "error": null,                    // the turn itself failed (a 500, a refusal)
+  "usage": null,                    // { input, output, cacheRead, cacheWrite, total, costUsd }
+  "label": "", "detail": ""         // meta/compaction, in the host's own words
+}
+```
+
+- Hosts **normalize** their agent's log onto these entries. The client renders entries and knows
+  nothing about any agent framework; a host that passed its raw log through would have a viewer
+  that works for its agent and blanks for every other host.
+- `isError` is a tool reporting failure; `error` is the turn breaking. A transcript needs both,
+  and counting them together makes a run that hit one flaky `curl` look like a run that fell over
+  six times.
+- `truncated` on a block means the host cut it (see `TRANSCRIPT_BLOCK_LIMIT`, 20,000 characters).
+  Clients must show that it was cut: silently shortened evidence is worse than less of it.
+- `kind: "compaction"` marks the agent summarising its own history away. The entries before it are
+  gone from the model's context, and a reader who cannot see that happened will read the summary
+  as the model's own words.
+
 ## Documented future methods
 
 The server MUST answer these with `-32601` (method not found) in v1. The
@@ -432,6 +504,8 @@ protocol reserves their names so hosts can detect a newer client.
 
 ## Changelog
 
+- v9 — `transcript.get`: the migration agent's conversation, tool calls, thinking and failures for one extension, normalized by the host into `TranscriptEntry` and paged. `Backend.getTranscript` is optional; hosts without an agent answer `-32601`, hosts with one but no record answer `available: false`. `summarizeTranscript` derives the headline numbers so they mean the same thing on every host.
+- v8 — `extensions.list` params gain an optional `filter`: report verdicts, unreviewed rows, and whether an MV3 build exists. OR within a facet, AND between them; applied before paging and before `stats`. `matchesListFilter` applies it identically on every host.
 - v7 — `ExtensionLight` gains an optional `verdict`, the stored report's verdict, so a list can show what a review found rather than only that one exists. `reportVerdict` derives it for reports of every generation.
 - v6 — `analysis.explain`: an optional, model-backed explanation of a failing report, built by the SDK from the report, both manifest summaries and the MV2→MV3 diff. `Backend.explainFailure` is optional; hosts without it answer `-32601`.
 - v5 — `ExtensionLight` gains `hasReport`: true when a report exists for the extension. The client marks migrated (`hasMv3`) and tested (`hasReport`) rows with distinct unicode icons; the tested icon replaces the migrated one.

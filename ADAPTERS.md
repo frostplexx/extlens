@@ -54,6 +54,12 @@ const backend: Backend = {
     };
   },
 
+  // Optional: the agent's transcript for one extension, if the host runs an agent and kept one.
+  // Normalize the agent's own log onto TranscriptEntry (PROTOCOL.md) and summarize with
+  // summarizeTranscript over EVERY entry, then slice the page. AgenticMigrator's
+  // src/extlens/transcript.ts does this for pi session exports and is the worked example.
+  // async getTranscript({ extensionId, offset, limit }) { ... }
+
   async getExtension(id) {
     // Return null for an unknown id (the SDK maps it to -32601/404).
     return {

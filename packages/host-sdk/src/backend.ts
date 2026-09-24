@@ -9,6 +9,8 @@ import type {
   Report,
   ReportDraft,
   ExtensionProfile,
+  TranscriptParams,
+  TranscriptResult,
 } from "@extlens/protocol";
 import type { ExtensionSource } from "@extlens/analyzer";
 
@@ -89,4 +91,18 @@ export interface Backend {
    * the model is asked to account for.
    */
   explainFailure?(extensionId: string): Promise<ExplainResult | null>;
+
+  /**
+   * The agent's transcript for one extension: the conversation, the tool calls, the failures.
+   *
+   * Optional, because only a host that runs an agent has one — a folder of extensions has nothing
+   * to show and answers -32601, which the client reads as "this host keeps no transcripts" rather
+   * than as an empty conversation. A host that runs an agent but kept no record for this
+   * particular extension returns `available: false` instead: that is a different fact, and a
+   * reviewer needs to be able to tell "nothing was recorded" from "nothing happened".
+   *
+   * Hosts normalize their agent's own log onto `TranscriptEntry` (see PROTOCOL.md) and derive the
+   * summary with `summarizeTranscript` over every entry, not over the returned page.
+   */
+  getTranscript?(params: TranscriptParams): Promise<TranscriptResult | null>;
 }
