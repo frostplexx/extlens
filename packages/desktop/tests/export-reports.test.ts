@@ -30,6 +30,14 @@ const base: Report = {
 
 const rows = (...reports: Report[]): ReportRow[] => reports.map((report) => ({ name: "An Ext", report }));
 
+const analysis = {
+    findingCount: 3,
+    signalCount: 7,
+    signalsByCategory: { blocking_webrequest: 5, background_dom: 2 },
+    filesAffected: 4,
+};
+const agentUsage = { skillsRead: ["mv3-non-trivial", "manifest-csp"], toolCalls: { read: 9, edit: 4 }, toolCallCount: 13 };
+
 /**
  * A real CSV reader, because a naive split on commas cannot read the file the code writes — which
  * is the whole point of the escaping tests below.
@@ -116,5 +124,60 @@ describe("empty corpus", () => {
     it("still writes the header, so the file is readable rather than blank", () => {
         expect(parseCsv(reportsToCsv([]))).toHaveLength(1);
         expect(reportsToCsv([])).toContain("extension_id");
+    });
+});
+
+describe("difficulty, so a score can be read at all", () => {
+    it("carries the counts that say how much there was to get wrong", () => {
+        // Two extensions at score 1.0 are the same cell until this column separates them.
+        const csv = reportsToCsv([{ name: "An Ext", report: base, analysis }]);
+        expect(column(csv, "finding_count")).toBe("3");
+        expect(column(csv, "signal_count")).toBe("7");
+        expect(column(csv, "files_affected")).toBe("4");
+    });
+
+    it("gives each signal category its own column, discovered from the rows", () => {
+        // The host owns the vocabulary; hardcoding it here would silently drop a new category.
+        const csv = reportsToCsv([{ name: "An Ext", report: base, analysis }]);
+        expect(csv.split("\n")[0]).toContain("signal_blocking_webrequest");
+        expect(column(csv, "signal_blocking_webrequest")).toBe("5");
+        expect(column(csv, "signal_background_dom")).toBe("2");
+    });
+
+    it("leaves difficulty blank when the run is gone, never zero", () => {
+        // Zero would claim the extension needed no work, which is a different and false finding.
+        const csv = reportsToCsv([
+            { name: "Measured", report: base, analysis },
+            { name: "Review only", report: base },
+        ]);
+        expect(column(csv, "signal_count", 2)).toBe("");
+        expect(column(csv, "signal_blocking_webrequest", 2)).toBe("");
+    });
+
+    it("keeps the narrow shape when no row was analysed", () => {
+        // A host that does no static analysis should not gain a wall of empty columns.
+        const header = reportsToCsv(rows(base)).split("\n")[0];
+        expect(header).not.toContain("signal_count");
+        expect(header).not.toContain("skills_read");
+    });
+});
+
+describe("what the agent actually read", () => {
+    it("records the reference documents it opened", () => {
+        const csv = reportsToCsv([{ name: "An Ext", report: base, agentUsage }]);
+        expect(column(csv, "skills_read")).toBe("mv3-non-trivial;manifest-csp");
+        expect(column(csv, "skills_read_count")).toBe("2");
+        expect(column(csv, "tool_calls")).toBe("13");
+    });
+
+    it("distinguishes an agent that opened nothing from one that was never measured", () => {
+        // This is the whole point of the column: "read no instructions" is a finding about the
+        // model, "not recorded" is a fact about the harness, and they must not share a cell.
+        const csv = reportsToCsv([
+            { name: "Read nothing", report: base, agentUsage: { skillsRead: [], toolCalls: {}, toolCallCount: 0 } },
+            { name: "Not measured", report: base },
+        ]);
+        expect(column(csv, "skills_read_count", 1)).toBe("0");
+        expect(column(csv, "skills_read_count", 2)).toBe("");
     });
 });

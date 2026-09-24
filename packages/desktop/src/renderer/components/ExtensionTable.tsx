@@ -8,7 +8,7 @@
  */
 import * as React from "react";
 import { useEffect, useMemo, useRef } from "react";
-import type { ExtensionLight, ExtensionVerdict, SortOrder } from "@extlens/protocol";
+import type { ExtensionLight, SortOrder } from "@extlens/protocol";
 import { VERDICT_LABELS } from "@extlens/protocol";
 import {
     flexRender,
@@ -17,12 +17,12 @@ import {
     type ColumnDef,
     type SortingState,
 } from "@tanstack/react-table";
-import { ArrowDown, ArrowUp, CheckCircle2, ChevronsUpDown, CircleAlert, CircleSlash, FileUp, XCircle } from "lucide-react";
+import { ArrowDown, ArrowUp, CheckCircle2, ChevronsUpDown, FileUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { ScoreBar, prettyTag } from "./shared";
+import { ScoreBar, VERDICT_ICON, VERDICT_TONE, prettyTag } from "./shared";
 import { cn } from "@/lib/utils";
 
 const VISIBLE_TAGS = 2;
@@ -234,24 +234,10 @@ function TagList({ tags }: { tags: string[] }) {
  * The verdict is; and before there is one, the only other state worth a word is "migrated, not yet
  * looked at".
  */
-const RESULT_TONE: Record<ExtensionVerdict, string> = {
-    working: "text-green",
-    partially_working: "text-yellow",
-    not_working: "text-red",
-    not_testable: "text-blue",
-};
-
-const RESULT_ICON: Record<ExtensionVerdict, React.ElementType> = {
-    working: CheckCircle2,
-    partially_working: CircleAlert,
-    not_working: XCircle,
-    not_testable: CircleSlash,
-};
-
 function Result({ row }: { row: ExtensionLight }) {
     const verdict = row.verdict ?? null;
     const glyph: { Icon: React.ElementType; tone: string; label: string } | null = verdict
-        ? { Icon: RESULT_ICON[verdict], tone: RESULT_TONE[verdict], label: VERDICT_LABELS[verdict] }
+        ? { Icon: VERDICT_ICON[verdict], tone: VERDICT_TONE[verdict], label: VERDICT_LABELS[verdict] }
         : row.hasReport
           // A host from before the verdict field: it says there is a report but not what it found.
           ? { Icon: CheckCircle2, tone: "text-muted-foreground", label: "Reviewed" }

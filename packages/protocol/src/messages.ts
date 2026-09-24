@@ -58,6 +58,20 @@ export const SortOrderSchema = z.enum([
   "name",
 ]);
 
+/**
+ * Per-extension verdict.
+ *
+ * Four states rather than the older tri-state boolean, because "some of it works" is the common
+ * outcome of an MV3 migration and had nowhere to go: a partially working extension had to be
+ * recorded as either a success or a total loss.
+ */
+export const ExtensionVerdictSchema = z.enum([
+  "working",
+  "partially_working",
+  "not_working",
+  "not_testable",
+]);
+
 // ---------------------------------------------------------------------------
 // ping
 // ---------------------------------------------------------------------------
@@ -68,12 +82,42 @@ export const PingResultSchema = z.object({ ok: z.literal(true) });
 // extensions.list
 // ---------------------------------------------------------------------------
 
+/**
+ * Which rows a list call should keep.
+ *
+ * Two facets, and they compose the way a reader expects a faceted filter to compose: OR inside a
+ * facet, AND between them. So "working or partially working, and migrated" is one call, while
+ * "working" and "not migrated" cannot silently widen each other.
+ *
+ * The result facet is deliberately the same set of states the table's first column shows — the
+ * four verdicts plus "no report yet" — because the reason to filter is almost always that a glyph
+ * was spotted in that column and the rest of the corpus is now in the way. `unreviewed` is a flag
+ * rather than a fifth verdict because "no report" is the absence of a verdict, not one of them.
+ *
+ * Every field is optional and an absent facet means "keep everything", so `{}` is the same query
+ * as no filter at all. Hosts apply it with `matchesListFilter` so the semantics cannot drift
+ * between one host and the next.
+ */
+export const ListFilterSchema = z.object({
+  /** Report verdicts to keep. Empty or absent constrains nothing. */
+  verdicts: z.array(ExtensionVerdictSchema).max(4).optional(),
+  /** Also keep rows with no report at all — the other half of the result facet. */
+  unreviewed: z.boolean().optional(),
+  /** Keep only rows that have an MV3 build (true), or only those that do not (false). */
+  migrated: z.boolean().optional(),
+});
+
 export const ListParamsSchema = z
   .object({
     page: z.number().int().positive().default(1),
     pageSize: z.number().int().min(1).max(200).default(50),
     search: z.string().max(200).optional(),
     sort: SortOrderSchema.default("interestingness_desc"),
+    /**
+     * Server-side because paging is: filtering a fetched page client-side would leave the row
+     * count, the page count and the statistics describing a set the reader cannot see.
+     */
+    filter: ListFilterSchema.optional(),
   })
   .default({});
 
@@ -92,7 +136,7 @@ export const ExtensionLightSchema = z.object({
    * Hosts derive it with `reportVerdict` so legacy reports resolve the same way everywhere.
    * Optional so hosts from before it existed still validate; null when there is no report.
    */
-  verdict: z.lazy(() => ExtensionVerdictSchema).nullable().optional(),
+  verdict: ExtensionVerdictSchema.nullable().optional(),
 });
 
 export const ListStatsSchema = z.object({
@@ -212,20 +256,6 @@ export const SurfaceResultSchema = z.object({
   note: z.string().default(""),
 });
 
-/**
- * Per-extension verdict.
- *
- * Four states rather than the older tri-state boolean, because "some of it works" is the common
- * outcome of an MV3 migration and had nowhere to go: a partially working extension had to be
- * recorded as either a success or a total loss.
- */
-export const ExtensionVerdictSchema = z.enum([
-  "working",
-  "partially_working",
-  "not_working",
-  "not_testable",
-]);
-
 export const ExtensionProfileSchema = z.object({
   id: ExtensionIdSchema,
   name: z.string(),
@@ -316,15 +346,57 @@ export const ReportSchema = ReportDraftSchema.extend({
 });
 
 /**
- * One row of an export: the report plus the extension's name.
+ * How much there was to get wrong, as the host's static analysis measured it.
+ *
+ * A score with no difficulty beside it is not interpretable: "1.0" from an extension that needed
+ * twelve non-mechanical rewrites and "1.0" from one that needed none are the same cell, and a
+ * corpus table cannot tell whether two models agree because they are equally good or because
+ * nothing they were handed could separate them. Optional because a host need not do static
+ * analysis, and because a review can outlive the run whose numbers these were.
+ */
+export const AnalysisSummarySchema = z.object({
+  /** Deprecated-API call sites: the mechanical half, where the replacement is known up front. */
+  findingCount: z.number().int().min(0),
+  /** Non-mechanical signals: the work no converter can do. The difficulty number worth plotting. */
+  signalCount: z.number().int().min(0),
+  /** Signals per category, so "hard because of webRequest" stays distinct from "hard because of the DOM". */
+  signalsByCategory: z.record(z.string(), z.number().int().min(0)).default({}),
+  /** Distinct files carrying at least one finding or signal. */
+  filesAffected: z.number().int().min(0),
+});
+
+/**
+ * What the agent consumed, as opposed to what it was offered.
+ *
+ * Hosts that hand an agent reference documents generally record which documents EXIST, not which
+ * the agent opened — and where a document is reachable only by a voluntary tool call, those are
+ * different facts. A model that never opens one is working from less information than a model
+ * that does, on identical inputs, which is a mundane explanation for a weak row that is otherwise
+ * indistinguishable from incapability.
+ */
+export const AgentUsageSchema = z.object({
+  /** Reference documents the agent actually opened. An empty list is the interesting case. */
+  skillsRead: z.array(z.string()).default([]),
+  /** Calls per tool name. */
+  toolCalls: z.record(z.string(), z.number().int().min(0)).default({}),
+  /** Tool calls in total: the denominator for "did this agent act at all". */
+  toolCallCount: z.number().int().min(0).default(0),
+});
+
+/**
+ * One row of an export: the report, the extension's name, and the run's own measurements.
  *
  * The name is included because an export is read by a person and a 32-character id is not a name.
  * It is not stored in the report itself — a report is about one extension at one moment, while the
- * name comes from whatever the manifest currently says.
+ * name comes from whatever the manifest currently says. `analysis` and `agentUsage` ride alongside
+ * for the same reason: they are facts about the extension and the run that produced it, not about
+ * the review, so they do not belong inside a document a human wrote.
  */
 export const ReportRowSchema = z.object({
   name: z.string(),
   report: ReportSchema,
+  analysis: AnalysisSummarySchema.optional(),
+  agentUsage: AgentUsageSchema.optional(),
 });
 
 export const ReportsListResultSchema = z.object({

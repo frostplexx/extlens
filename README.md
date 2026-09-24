@@ -13,8 +13,9 @@ profiles with a pure analyzer. The client never touches host storage.
   profile computation, protocol validation.
 - Desktop app (`npm run desktop`): an Electron app — a React + Tailwind page
   (shadcn/ui components) in a window, with the main process owning the host
-  link and the test browsers. Dense sortable table, detail pane, real form
-  controls, collapsible host log, and a settings page (host, browsers, keychain).
+  link and the test browsers. Dense sortable table with a host-side "filter by"
+  (verdict, unreviewed, MV3 build), detail pane, real form controls, collapsible
+  host log, and a settings page (host, browsers, keychain).
 - A real adapter: AgenticMigrator (`src/extlens/` in that repo) serves its
   `run/` outputs.
 - Folder mode: `extlens serve <folder>` ingests a plain directory of

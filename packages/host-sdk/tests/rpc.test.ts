@@ -50,6 +50,36 @@ describe("extensions.list", () => {
       error: { code: ErrorCodes.INVALID_PARAMS, message: expect.stringContaining("invalid params") },
     });
   });
+
+  test("passes a filter through to the backend untouched", async () => {
+    let seen: { filter?: unknown } | undefined;
+    const backend = {
+      ...makeStubBackend(),
+      async listExtensions(params: never) {
+        seen = params;
+        return (await makeStubBackend().listExtensions(params as never)) as never;
+      },
+    };
+    const filter = { verdicts: ["working"], unreviewed: true, migrated: false };
+    await call(backend, "extensions.list", { filter });
+    expect(seen?.filter).toEqual(filter);
+  });
+
+  test("narrows the result by the filter", async () => {
+    // The fixtures carry no reports, so every row is unreviewed: asking for a verdict empties the
+    // list, and asking for unreviewed rows keeps it whole.
+    const empty = await call(makeStubBackend(), "extensions.list", { filter: { verdicts: ["working"] } });
+    expect((empty as { result: { extensions: unknown[] } }).result.extensions).toEqual([]);
+    const all = await call(makeStubBackend(), "extensions.list", { filter: { unreviewed: true } });
+    expect((all as { result: { extensions: unknown[] } }).result.extensions.length).toBe(2);
+  });
+
+  test("rejects a verdict the protocol does not define", async () => {
+    const res = await call(makeStubBackend(), "extensions.list", { filter: { verdicts: ["mostly_fine"] } });
+    expect(res).toEqual({
+      error: { code: ErrorCodes.INVALID_PARAMS, message: expect.stringContaining("invalid params") },
+    });
+  });
 });
 
 describe("extensions.get", () => {

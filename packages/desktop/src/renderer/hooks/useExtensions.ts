@@ -6,7 +6,8 @@
  * many rows as fit.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { ExtensionLight, ListResult, ListStats, SortOrder } from "@extlens/protocol";
+import type { ExtensionLight, ListFilter, ListResult, ListStats, SortOrder } from "@extlens/protocol";
+import { listFilterIsEmpty } from "@extlens/protocol";
 import type { BridgeHandle } from "./useBridge";
 
 export const PAGE_SIZE = 100;
@@ -24,11 +25,13 @@ export interface ExtensionsState {
     totalPages: number;
     search: string;
     sort: SortOrder;
+    filter: ListFilter;
     loading: boolean;
     error: string | null;
     selectedId: string | null;
     setSearch: (value: string) => void;
     setSort: (value: SortOrder) => void;
+    setFilter: (value: ListFilter) => void;
     setPage: (value: number) => void;
     select: (id: string | null) => void;
     /** Move the selection by one row, for keyboard navigation. */
@@ -44,6 +47,7 @@ export function useExtensions(bridge: BridgeHandle, connected: boolean): Extensi
     const [search, setSearchRaw] = useState("");
     const [debounced, setDebounced] = useState("");
     const [sort, setSort] = useState<SortOrder>("interestingness_desc");
+    const [filter, setFilterRaw] = useState<ListFilter>({});
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -65,6 +69,9 @@ export function useExtensions(bridge: BridgeHandle, connected: boolean): Extensi
                 pageSize: PAGE_SIZE,
                 search: debounced || undefined,
                 sort,
+                // Omitted rather than sent empty: a host is free to treat an empty filter as a
+                // reason to take the slower path, and there is nothing to ask for here.
+                filter: listFilterIsEmpty(filter) ? undefined : filter,
             })
             .then((result) => {
                 if (cancelled) return;
@@ -81,12 +88,18 @@ export function useExtensions(bridge: BridgeHandle, connected: boolean): Extensi
         return () => {
             cancelled = true;
         };
-    }, [bridge, connected, page, debounced, sort, nonce]);
+    }, [bridge, connected, page, debounced, sort, filter, nonce]);
 
     const setSearch = useCallback((value: string) => {
         // A new query invalidates the page number: staying on page 7 of the old result set shows
         // an empty table and looks like "no matches".
         setSearchRaw(value);
+        setPage(1);
+    }, []);
+
+    // Same reasoning as a new search: the old page number does not survive a narrower result set.
+    const setFilter = useCallback((value: ListFilter) => {
+        setFilterRaw(value);
         setPage(1);
     }, []);
 
@@ -110,6 +123,7 @@ export function useExtensions(bridge: BridgeHandle, connected: boolean): Extensi
             totalPages,
             search,
             sort,
+            filter,
             loading,
             error,
             selectedId,
@@ -118,11 +132,12 @@ export function useExtensions(bridge: BridgeHandle, connected: boolean): Extensi
                 setSort(value);
                 setPage(1);
             },
+            setFilter,
             setPage,
             select: setSelectedId,
             moveSelection,
             refresh: () => setNonce((n) => n + 1),
         }),
-        [rows, stats, page, totalPages, search, sort, loading, error, selectedId, setSearch, moveSelection],
+        [rows, stats, page, totalPages, search, sort, filter, loading, error, selectedId, setSearch, setFilter, moveSelection],
     );
 }

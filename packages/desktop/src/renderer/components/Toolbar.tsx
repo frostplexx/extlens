@@ -1,11 +1,12 @@
-/** Search, sort and corpus statistics: the controls that act on the table below them. */
+/** Search, sort, filter and corpus statistics: the controls that act on the table below them. */
 import * as React from "react";
-import type { ListStats, SortOrder } from "@extlens/protocol";
+import type { ListFilter, ListStats, SortOrder } from "@extlens/protocol";
 import { Search } from "lucide-react";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Kbd } from "@/components/ui/kbd";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { FilterMenu } from "./FilterMenu";
 import { SORTS } from "../hooks/useExtensions";
 import { Stat } from "./shared";
 
@@ -14,6 +15,8 @@ export function Toolbar({
     onSearch,
     sort,
     onSort,
+    filter,
+    onFilter,
     stats,
     searchRef,
 }: {
@@ -21,6 +24,8 @@ export function Toolbar({
     onSearch: (value: string) => void;
     sort: SortOrder;
     onSort: (value: SortOrder) => void;
+    filter: ListFilter;
+    onFilter: (value: ListFilter) => void;
     stats: ListStats | null;
     searchRef: React.Ref<HTMLInputElement>;
 }) {
@@ -53,6 +58,8 @@ export function Toolbar({
                     ))}
                 </SelectContent>
             </Select>
+
+            <FilterMenu filter={filter} onChange={onFilter} />
 
             {stats ? (
                 <>

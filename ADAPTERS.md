@@ -40,8 +40,11 @@ import { createExtlensServer, type Backend } from "extlens-sdk";
 
 const backend: Backend = {
   async listExtensions(params) {
-    // params: { page (1-indexed), pageSize, search?, sort }
+    // params: { page (1-indexed), pageSize, search?, sort, filter? }
     // sort: "interestingness_desc" | "interestingness_asc" | "name"
+    // filter: apply it with matchesListFilter(row, params.filter) from extlens-sdk, before
+    // paging and before stats — see PROTOCOL.md. Reimplementing it host-side is how two hosts
+    // end up disagreeing about what "working" selects.
     return {
       extensions: [...],      // ExtensionLight: id, name, version, manifestVersion, score, tags, hasMv3
       stats: { total, analyzed, withMv3, avgScore },

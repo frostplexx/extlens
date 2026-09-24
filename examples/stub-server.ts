@@ -16,6 +16,7 @@ import {
   createExtlensServer,
   computeProfile,
   explainerConfigured,
+  matchesListFilter,
   reportVerdict,
   type Backend,
   type ExtensionSource,
@@ -84,9 +85,12 @@ function makeBackend(): Backend {
         return params.sort === "interestingness_asc" ? a.score - b.score : b.score - a.score;
       });
       const search = params.search;
-      const filtered = search
+      const searched = search
         ? sorted.filter((e) => e.name.toLowerCase().includes(search.toLowerCase()))
         : sorted;
+      // The protocol's own helper, not a local reading of it: a host that filters its own way is
+      // the thing the helper exists to prevent.
+      const filtered = searched.filter((e) => matchesListFilter(e, params.filter));
       const page = params.page;
       const pageSize = params.pageSize;
       return {

@@ -5,6 +5,7 @@
 export * from "./messages.js";
 export * from "./types.js";
 export * from "./verdict.js";
+export * from "./list-filter.js";
 export * from "./surface-copy.js";
 
 /** The protocol version this package implements. Matches PROTOCOL.md v1. */

@@ -11,12 +11,13 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import Database from "better-sqlite3";
 import type { ExtensionSource, SourceFile } from "@extlens/analyzer";
-import { reportVerdict } from "@extlens/protocol";
+import { listFilterIsEmpty, reportVerdict } from "@extlens/protocol";
 import type {
   ExtensionLight,
   ExtensionProfile,
   ExtensionVerdict,
   FileRefs,
+  ListFilter,
   ListParams,
   ListResult,
   Report,
@@ -378,42 +379,103 @@ class FolderBackendImpl implements Backend {
     };
   }
 
-  async listExtensions(params: ListParams): Promise<ListResult> {
+  /**
+   * Every verdict in the corpus, by extension id.
+   *
+   * One query rather than one per row: a report is what makes an extension reviewed, and its
+   * verdict is both the column the table is scanned by and the facet it is filtered by. The
+   * verdict itself is derived in JS (`reportVerdict` reads the stored payload, including the
+   * older shapes), which is why the filter below narrows by id rather than in SQL.
+   */
+  private verdictsById(): Map<string, ExtensionVerdict> {
+    return new Map(
+      (this.db.prepare("SELECT extension_id, payload FROM reports").all() as {
+        extension_id: string;
+        payload: string;
+      }[]).map((r) => [r.extension_id, reportVerdict(JSON.parse(r.payload) as Report)]),
+    );
+  }
+
+  /**
+   * The WHERE clause shared by the page, the count and the statistics.
+   *
+   * All three have to agree, or the reader gets a page of ten rows above a footer claiming four
+   * hundred. Built as clauses AND-ed together, with named binds so the three statements can be
+   * prepared from the same pair.
+   */
+  private listWhere(
+    params: ListParams,
+    verdicts: Map<string, ExtensionVerdict>,
+  ): { where: string; binds: Record<string, unknown> } {
+    const clauses: string[] = [];
+    const binds: Record<string, unknown> = {};
+
     const search = params.search?.trim().toLowerCase();
-    const where = search
-      ? "WHERE (name LIKE @like OR id LIKE @like OR version LIKE @like)"
-      : "";
+    if (search) {
+      clauses.push("(name LIKE @like OR id LIKE @like OR version LIKE @like)");
+      binds.like = `%${search}%`;
+    }
+
+    const filter: ListFilter | undefined = listFilterIsEmpty(params.filter)
+      ? undefined
+      : params.filter;
+    if (filter) {
+      const wanted = filter.verdicts ?? [];
+      if (wanted.length > 0 || filter.unreviewed) {
+        // The result facet is an OR: named verdicts, plus unreviewed rows when asked for.
+        const ids = [...verdicts]
+          .filter(([, verdict]) => wanted.includes(verdict))
+          .map(([id]) => id);
+        const alternatives: string[] = [];
+        if (wanted.length > 0) {
+          // A literal id list, not a subquery: the verdict cannot be expressed in SQL. Bounded by
+          // the number of reviewed extensions, which is a human-sized number by construction.
+          const names = ids.map((id, i) => {
+            binds[`v${i}`] = id;
+            return `@v${i}`;
+          });
+          // An empty list is "no row has a wanted verdict" — not valid SQL as `id IN ()`.
+          alternatives.push(names.length > 0 ? `id IN (${names.join(", ")})` : "0");
+        }
+        if (filter.unreviewed) alternatives.push("id NOT IN (SELECT extension_id FROM reports)");
+        clauses.push(`(${alternatives.join(" OR ")})`);
+      }
+      // Folder mode serves the sources it was pointed at and nothing else: no row here has an MV3
+      // build (`rowToLight` says so), so the facet is a constant rather than a column test.
+      if (filter.migrated !== undefined) clauses.push(filter.migrated ? "0" : "1");
+    }
+
+    return { where: clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "", binds };
+  }
+
+  async listExtensions(params: ListParams): Promise<ListResult> {
+    const verdicts = this.verdictsById();
+    const { where, binds } = this.listWhere(params, verdicts);
+    const bound = Object.keys(binds).length > 0;
     const order =
       params.sort === "name"
         ? "ORDER BY name COLLATE NOCASE, id"
         : params.sort === "interestingness_asc"
           ? "ORDER BY score ASC, id"
           : "ORDER BY score DESC, id";
-    const like = `%${search}%`;
     const countStmt = this.db.prepare(`SELECT COUNT(*) AS n FROM extensions ${where}`);
-    const total = ((search ? countStmt.get({ like }) : countStmt.get()) as { n: number }).n;
+    const total = ((bound ? countStmt.get(binds) : countStmt.get()) as { n: number }).n;
     const pageStmt = this.db.prepare(
       `SELECT * FROM extensions ${where} ${order} LIMIT @limit OFFSET @offset`,
     );
-    const pageRows = (search
-      ? pageStmt.all({ like, limit: params.pageSize, offset: (params.page - 1) * params.pageSize })
-      : pageStmt.all({ limit: params.pageSize, offset: (params.page - 1) * params.pageSize })) as unknown as ExtensionRow[];
+    const pageRows = pageStmt.all({
+      ...binds,
+      limit: params.pageSize,
+      offset: (params.page - 1) * params.pageSize,
+    }) as unknown as ExtensionRow[];
     const statsStmt = this.db.prepare(
       `SELECT COUNT(*) AS n, AVG(score) AS avg, SUM(CASE WHEN manifest_version = 3 THEN 1 ELSE 0 END) AS mv3 FROM extensions ${where}`,
     );
-    const statsRow = (search ? statsStmt.get({ like }) : statsStmt.get()) as {
+    const statsRow = (bound ? statsStmt.get(binds) : statsStmt.get()) as {
       n: number;
       avg: number | null;
       mv3: number | null;
     };
-    // One query for every verdict: a report is what makes an extension tested, and its verdict
-    // is the column the table is scanned by.
-    const verdicts = new Map(
-      (this.db.prepare("SELECT extension_id, payload FROM reports").all() as {
-        extension_id: string;
-        payload: string;
-      }[]).map((r) => [r.extension_id, reportVerdict(JSON.parse(r.payload) as Report)]),
-    );
     return {
       extensions: pageRows.map((r) => this.rowToLight(r, verdicts.get(r.id) ?? null)),
       stats: {

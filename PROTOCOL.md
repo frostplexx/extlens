@@ -67,12 +67,37 @@ Params:
 | pageSize | int    | 50                     | 1..200                                  |
 | search   | string | none                   | case-insensitive substring on name      |
 | sort     | string | interestingness_desc   | one of the three values below           |
+| filter   | object | none                   | facets to narrow by; see below          |
 
 `sort` values:
 
 - `interestingness_desc` — highest score first
 - `interestingness_asc` — lowest score first
 - `name` — name ascending
+
+`filter` fields, all optional:
+
+| field      | type     | notes                                                          |
+|------------|----------|----------------------------------------------------------------|
+| verdicts   | string[] | report verdicts to keep, from the four `ExtensionVerdict` values |
+| unreviewed | bool     | `true` also keeps extensions with no report                     |
+| migrated   | bool     | `true` keeps only extensions with an MV3 build; `false` only those without |
+
+How the facets compose: OR within a facet, AND between them. `verdicts` and `unreviewed` are one
+facet (the result), `migrated` is another, so
+`{"verdicts":["working"],"unreviewed":true,"migrated":true}` means "has an MV3 build, and is either
+working or not yet reviewed".
+
+- An absent or empty facet constrains nothing, so `{}` is the same query as no filter.
+- `verdicts` never matches an extension without a report: no report is the absence of a verdict,
+  not one of them. An extension the host reports as reviewed but for which it has no verdict
+  (a host from before the field) matches neither `verdicts` nor `unreviewed`.
+- The filter applies before paging **and before `stats`**: `total`, `avgScore` and `totalPages`
+  describe the filtered set, the same way they already describe a `search`. A client shows those
+  numbers next to the rows it received, and they have to be about the same rows.
+- Hosts should apply it with `matchesListFilter` from `@extlens/protocol` (re-exported by
+  `extlens-sdk`) rather than reimplementing the rules, so the same filter selects the same
+  extensions on every host.
 
 Result:
 

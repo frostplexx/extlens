@@ -8,7 +8,7 @@ import type {
 } from "../src/index.js";
 import { computeProfile } from "../src/profile.js";
 import { RpcError } from "../src/rpc.js";
-import { ErrorCodes } from "../src/index.js";
+import { ErrorCodes, matchesListFilter, reportVerdict } from "../src/index.js";
 
 /** In-memory backend over the synthetic fixtures. */
 export function loadFixture(dirName: string): ExtensionSource {
@@ -59,6 +59,7 @@ export function makeStubBackend(): Backend & { reports: Map<string, Report> } {
           tags: profile.tags,
           hasMv3: profile.hasMv3,
           hasReport: reports.has(profile.id),
+          verdict: reports.has(profile.id) ? reportVerdict(reports.get(profile.id)!) : null,
         };
       });
       const sorted = [...all].sort((a, b) => {
@@ -66,9 +67,10 @@ export function makeStubBackend(): Backend & { reports: Map<string, Report> } {
         return params.sort === "interestingness_asc" ? a.score - b.score : b.score - a.score;
       });
       const search = params.search;
-      const filtered = search
+      const searched = search
         ? sorted.filter((e) => e.name.toLowerCase().includes(search.toLowerCase()))
         : sorted;
+      const filtered = searched.filter((e) => matchesListFilter(e, params.filter));
       const page = params.page;
       const pageSize = params.pageSize;
       const paged = filtered.slice((page - 1) * pageSize, page * pageSize);

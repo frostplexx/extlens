@@ -6,6 +6,8 @@
  * what a browser phase looks like — lives here.
  */
 import * as React from "react";
+import type { ExtensionVerdict } from "@extlens/protocol";
+import { CheckCircle2, CircleAlert, CircleSlash, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -104,3 +106,24 @@ export function SourceLink({
         </button>
     );
 }
+
+/**
+ * How a verdict looks: one glyph, one colour, everywhere it appears.
+ *
+ * The table's result column and the filter that narrows it are the same vocabulary seen twice, and
+ * a reader picking "partially working" out of a menu is looking for the glyph they just saw in a
+ * row. Keeping the pair here is what makes those two places impossible to drift apart.
+ */
+export const VERDICT_TONE: Record<ExtensionVerdict, string> = {
+    working: "text-green",
+    partially_working: "text-yellow",
+    not_working: "text-red",
+    not_testable: "text-blue",
+};
+
+export const VERDICT_ICON: Record<ExtensionVerdict, React.ElementType> = {
+    working: CheckCircle2,
+    partially_working: CircleAlert,
+    not_working: XCircle,
+    not_testable: CircleSlash,
+};

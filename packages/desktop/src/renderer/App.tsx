@@ -8,7 +8,8 @@
 import * as React from "react";
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import type { ExplainResult, ReportDraft } from "@extlens/protocol";
-import { ChevronLeft, ChevronRight, PackageOpen, SearchX } from "lucide-react";
+import { listFilterIsEmpty } from "@extlens/protocol";
+import { ChevronLeft, ChevronRight, FilterX, PackageOpen, SearchX } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
@@ -269,6 +270,7 @@ export function App() {
     }, [run, mode, queue, list, readyFiles, subjectId, openInCode, exitDetour]);
 
     const empty = list.rows.length === 0 && !list.loading;
+    const filtered = !listFilterIsEmpty(list.filter);
 
     /**
      * The working area: the review pass, or the browse table and its detail pane.
@@ -327,6 +329,8 @@ export function App() {
                                 onSearch={list.setSearch}
                                 sort={list.sort}
                                 onSort={list.setSort}
+                                filter={list.filter}
+                                onFilter={list.setFilter}
                                 stats={list.stats}
                                 searchRef={searchRef}
                             />
@@ -335,13 +339,32 @@ export function App() {
                                 <Empty className="flex-1">
                                     <EmptyHeader>
                                         <EmptyMedia variant="icon">
-                                            {list.search ? <SearchX /> : <PackageOpen />}
+                                            {filtered ? <FilterX /> : list.search ? <SearchX /> : <PackageOpen />}
                                         </EmptyMedia>
                                         <EmptyTitle>
-                                            {list.search ? "No extensions match that search" : "No extensions yet"}
+                                            {filtered
+                                                ? "No extensions match those filters"
+                                                : list.search
+                                                  ? "No extensions match that search"
+                                                  : "No extensions yet"}
                                         </EmptyTitle>
                                         <EmptyDescription>
-                                            {list.search ? (
+                                            {/* An empty table under an active filter is the one empty state the
+                                                reader can fix from here, so it says so and offers the undo —
+                                                rather than reading like a corpus that turned out to be empty. */}
+                                            {filtered ? (
+                                                <>
+                                                    Widen them, or{" "}
+                                                    <button
+                                                        type="button"
+                                                        className="cursor-pointer underline underline-offset-2 hover:text-foreground"
+                                                        onClick={() => list.setFilter({})}
+                                                    >
+                                                        clear the filters
+                                                    </button>
+                                                    .
+                                                </>
+                                            ) : list.search ? (
                                                 <>
                                                     Try a shorter query, or clear the box with <Kbd>Esc</Kbd>.
                                                 </>

@@ -5,19 +5,22 @@ import { WebSocket } from "ws";
 import { createFolderBackend, discoverExtensions, extensionIdFromPath } from "../src/folder.js";
 import { createExtlensServer } from "../src/index.js";
 import type { Backend } from "../src/backend.js";
+import type { ListFilter } from "../src/index.js";
 
 const fixtures = join(import.meta.dirname, "..", "..", "..", "fixtures");
 const corpus = join(fixtures, "corpus-a");
 const scratchDb = join(fixtures, ".folder-test.sqlite");
+const filterDb = join(fixtures, ".folder-filter-test.sqlite");
 
 function makeBackend(): Backend {
   return createFolderBackend(corpus, { dbPath: scratchDb });
 }
 
 afterAll(() => {
-  if (existsSync(scratchDb)) {
+  for (const db of [scratchDb, filterDb]) {
+    if (!existsSync(db)) continue;
     try {
-      unlinkSync(scratchDb);
+      unlinkSync(db);
     } catch {
       // Windows keeps the file locked briefly; harmless.
     }
@@ -196,5 +199,149 @@ describe("folder backend over the wire", () => {
     expect(submitted.id).toBe(first.id);
     await server.close();
     ws.close();
+  });
+});
+
+/**
+ * Filtering in folder mode goes through SQL, so it is the implementation most able to disagree with
+ * the protocol helper the other hosts use: the verdict is derived in JS and injected as an id list,
+ * and the page, the count and the statistics are three separate statements that have to narrow
+ * identically. These tests are about that agreement, not about the filter semantics themselves
+ * (packages/protocol/tests/list-filter.test.ts owns those).
+ */
+describe("FolderBackend filtering", () => {
+  const draftFor = (id: string, verdict: "working" | "not_working") => ({
+    extensionId: id,
+    tested: true,
+    verificationDurationSecs: null,
+    installs: true,
+    worksInMv2: true,
+    needsLogin: false,
+    isPopupWorking: null,
+    isSettingsWorking: null,
+    isNewTabWorking: null,
+    isInteresting: true,
+    overallWorking: null,
+    notes: "",
+    listeners: [],
+    surfaces: [],
+    verdict,
+    score: null,
+  });
+
+  /** One corpus, one report of each verdict, so every facet has both a hit and a miss. */
+  async function seeded() {
+    const backend = createFolderBackend(corpus, { dbPath: filterDb });
+    const all = await backend.listExtensions({ page: 1, pageSize: 50, sort: "name" });
+    const [first, second] = all.extensions;
+    await backend.submitReport(draftFor(first!.id, "working"));
+    await backend.submitReport(draftFor(second!.id, "not_working"));
+    return { backend, all, working: first!, notWorking: second! };
+  }
+
+  test("keeps only the selected verdicts, and counts what it kept", async () => {
+    const { backend, working } = await seeded();
+    const res = await backend.listExtensions({
+      page: 1,
+      pageSize: 50,
+      sort: "name",
+      filter: { verdicts: ["working"] },
+    });
+    expect(res.extensions.map((e) => e.id)).toEqual([working.id]);
+    // The footer and the page have to describe the same set.
+    expect(res.stats.total).toBe(1);
+    expect(res.totalPages).toBe(1);
+  });
+
+  test("unions unreviewed rows with a selected verdict", async () => {
+    const { backend, all, notWorking } = await seeded();
+    const res = await backend.listExtensions({
+      page: 1,
+      pageSize: 50,
+      sort: "name",
+      filter: { verdicts: ["not_working"], unreviewed: true },
+    });
+    const ids = new Set(res.extensions.map((e) => e.id));
+    expect(ids.has(notWorking.id)).toBe(true);
+    for (const row of res.extensions) expect(row.verdict === "not_working" || !row.hasReport).toBe(true);
+    // Everything except the one reviewed as working.
+    expect(res.stats.total).toBe(all.stats.total - 1);
+  });
+
+  test("asks for unreviewed rows alone", async () => {
+    const { backend, all, working, notWorking } = await seeded();
+    const res = await backend.listExtensions({
+      page: 1,
+      pageSize: 50,
+      sort: "name",
+      filter: { unreviewed: true },
+    });
+    const ids = new Set(res.extensions.map((e) => e.id));
+    expect(ids.has(working.id)).toBe(false);
+    expect(ids.has(notWorking.id)).toBe(false);
+    expect(res.stats.total).toBe(all.stats.total - 2);
+  });
+
+  test("returns an empty page, not an error, for a verdict nothing has", async () => {
+    // The id list is empty here, which is not expressible as `id IN ()`.
+    const { backend } = await seeded();
+    const res = await backend.listExtensions({
+      page: 1,
+      pageSize: 50,
+      sort: "name",
+      filter: { verdicts: ["not_testable"] },
+    });
+    expect(res.extensions).toEqual([]);
+    expect(res.stats.total).toBe(0);
+    expect(res.stats.avgScore).toBe(0);
+    // A page count of zero would make the pager read "page 1 of 0".
+    expect(res.totalPages).toBe(1);
+  });
+
+  test("answers the migration facet honestly for a corpus with no MV3 builds", async () => {
+    const { backend, all } = await seeded();
+    const migrated = await backend.listExtensions({
+      page: 1,
+      pageSize: 50,
+      sort: "name",
+      filter: { migrated: true },
+    });
+    // Folder mode serves sources only, so nothing here has one. Saying so beats implying it does.
+    expect(migrated.stats.total).toBe(0);
+    const unmigrated = await backend.listExtensions({
+      page: 1,
+      pageSize: 50,
+      sort: "name",
+      filter: { migrated: false },
+    });
+    expect(unmigrated.stats.total).toBe(all.stats.total);
+  });
+
+  test("narrows a search rather than replacing it", async () => {
+    const { backend, working } = await seeded();
+    const res = await backend.listExtensions({
+      page: 1,
+      pageSize: 50,
+      sort: "name",
+      search: working.name,
+      filter: { verdicts: ["not_working"] },
+    });
+    // The row matches the search and fails the filter: both clauses apply.
+    expect(res.extensions).toEqual([]);
+  });
+
+  test("pages a filtered result with the filter still applied", async () => {
+    // Two reviewed rows, one per page: page 2 has to be the other reviewed row, not the next row of
+    // the unfiltered corpus.
+    const { backend, working, notWorking } = await seeded();
+    const filter: ListFilter = { verdicts: ["working", "not_working"] };
+    const first = await backend.listExtensions({ page: 1, pageSize: 1, sort: "name", filter });
+    expect(first.stats.total).toBe(2);
+    expect(first.totalPages).toBe(2);
+    const second = await backend.listExtensions({ page: 2, pageSize: 1, sort: "name", filter });
+    expect(second.extensions.length).toBe(1);
+    expect([first.extensions[0]!.id, second.extensions[0]!.id].sort()).toEqual(
+      [working.id, notWorking.id].sort(),
+    );
   });
 });

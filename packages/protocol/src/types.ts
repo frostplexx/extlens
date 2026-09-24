@@ -5,6 +5,7 @@ import type {
   FileRefsSchema,
   HostLogResultSchema,
   HostStatusSchema,
+  ListFilterSchema,
   ListParamsSchema,
   ListResultSchema,
   ListStatsSchema,
@@ -15,6 +16,8 @@ import type {
   OverallWorkingSchema,
   ReportDraftSchema,
   ReportRowSchema,
+  AnalysisSummarySchema,
+  AgentUsageSchema,
   ReportSchema,
   ScoreBreakdownSchema,
   SortOrderSchema,
@@ -39,6 +42,7 @@ export type FileRefs = z.infer<typeof FileRefsSchema>;
 export type ListStats = z.infer<typeof ListStatsSchema>;
 export type ListParams = z.infer<typeof ListParamsSchema>;
 export type SortOrder = z.infer<typeof SortOrderSchema>;
+export type ListFilter = z.infer<typeof ListFilterSchema>;
 export type ListResult = z.infer<typeof ListResultSchema>;
 export type ReportDraft = z.infer<typeof ReportDraftSchema>;
 export type Report = z.infer<typeof ReportSchema>;
@@ -49,6 +53,8 @@ export type LogLine = z.infer<typeof LogLineSchema>;
 export type HostLogResult = z.infer<typeof HostLogResultSchema>;
 
 export type ReportRow = z.infer<typeof ReportRowSchema>;
+export type AnalysisSummary = z.infer<typeof AnalysisSummarySchema>;
+export type AgentUsage = z.infer<typeof AgentUsageSchema>;
 export type UiSurface = z.infer<typeof UiSurfaceSchema>;
 export type SurfaceStatus = z.infer<typeof SurfaceStatusSchema>;
 export type SurfaceResult = z.infer<typeof SurfaceResultSchema>;
