@@ -11,6 +11,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { TranscriptEntry, TranscriptResult, TranscriptSummary } from "@extlens/protocol";
+import { isUnsupported } from "../lib/collect-transcripts";
 import type { BridgeHandle } from "./useBridge";
 
 /** Entries per request. The protocol's ceiling is 500; this keeps the first paint quick. */
@@ -32,11 +33,6 @@ export interface TranscriptState {
     hasMore: boolean;
     loadMore: () => void;
     reload: () => void;
-}
-
-/** A host that does not implement the method answers -32601; the SDK words it, we recognise it. */
-function isUnsupported(message: string): boolean {
-    return /method not found|no agent transcripts|-32601/i.test(message);
 }
 
 export function useTranscript(

@@ -19,6 +19,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { ReportRow } from "@extlens/protocol";
 import { exportFilename, reportsToCsv, reportsToJson } from "./lib/export-reports";
+import { collectTranscripts } from "./lib/collect-transcripts";
 import { isTyping } from "./lib/hotkeys";
 import { useBridge } from "./hooks/useBridge";
 import { useExtensions } from "./hooks/useExtensions";
@@ -150,9 +151,16 @@ export function App() {
      * keeps what the columns flatten away. Choosing between them at the moment of export is a
      * decision with no information behind it. Written by the main process rather than downloaded
      * from here — a page gets one gesture-less download, and this needs two.
+     *
+     * The JSON also carries each extension's agent transcript, because the pass the export feeds is
+     * usually "read every failed migration and find the common themes", and that needs the record
+     * of the run sitting next to its verdict. It is the slow, large part — a corpus is hundreds of
+     * transcripts of hundreds of kilobytes — so it reports progress while it goes, and a host that
+     * keeps no transcripts costs one call to discover.
      */
     const exportReports = useCallback(() => {
         setExporting(true);
+        const progress = "export-progress";
         bridge
             .call<{ reports: ReportRow[] }>("reports.list")
             .then(async (r) => {
@@ -160,19 +168,33 @@ export function App() {
                     toast.info("No reports saved yet");
                     return;
                 }
+                const transcripts = await collectTranscripts(
+                    bridge.call,
+                    r.reports.map((row) => row.report.extensionId),
+                    (done, total) =>
+                        toast.loading(`Collecting transcripts — ${done} of ${total}`, {
+                            id: progress,
+                            duration: Infinity,
+                        }),
+                );
+                toast.dismiss(progress);
                 const saved = await bridge.call<{ dir: string | null; files: string[] }>("local.app.saveExports", {
                     files: [
                         { name: exportFilename("csv"), content: reportsToCsv(r.reports) },
-                        { name: exportFilename("json"), content: reportsToJson(r.reports) },
+                        { name: exportFilename("json"), content: reportsToJson(r.reports, transcripts) },
                     ],
                 });
                 if (!saved.dir) return;
+                const withTranscript = Object.values(transcripts).filter((t) => t.available).length;
                 toast.success(`Exported ${r.reports.length} report${r.reports.length === 1 ? "" : "s"}`, {
-                    description: saved.dir,
+                    description: `${saved.dir} · ${withTranscript} with a transcript`,
                 });
             })
             .catch((e: Error) => toast.error(e.message))
-            .finally(() => setExporting(false));
+            .finally(() => {
+                toast.dismiss(progress);
+                setExporting(false);
+            });
     }, [bridge]);
 
     // A starting job opens the dock once. Having to go find the log to learn a batch began is a

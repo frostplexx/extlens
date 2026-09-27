@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from "vitest";
 import type { Report, ReportRow } from "@extlens/protocol";
-import { reportsToCsv } from "../src/renderer/lib/export-reports";
+import { reportsToCsv, reportsToJson } from "../src/renderer/lib/export-reports";
 
 const base: Report = {
     id: "r1",
@@ -179,5 +179,38 @@ describe("what the agent actually read", () => {
         ]);
         expect(column(csv, "skills_read_count", 1)).toBe("0");
         expect(column(csv, "skills_read_count", 2)).toBe("");
+    });
+});
+
+describe("transcripts in the JSON", () => {
+    const rowsFor = (...ids: string[]): ReportRow[] =>
+        ids.map((extensionId) => ({ name: extensionId, report: { ...base, extensionId } }));
+    const transcript = (model: string) => ({
+        available: true,
+        total: 1,
+        summary: { model } as never,
+        entries: [],
+    });
+
+    it("attaches each transcript to its own row, so attribution cannot be got wrong", () => {
+        const json = JSON.parse(
+            reportsToJson(rowsFor("a", "b"), { a: transcript("for-a"), b: transcript("for-b") }),
+        );
+        expect(json.reports[0].report.extensionId).toBe("a");
+        expect(json.reports[0].transcript.summary.model).toBe("for-a");
+        expect(json.reports[1].transcript.summary.model).toBe("for-b");
+        expect(json.transcriptsIncluded).toBe(true);
+    });
+
+    it("gives a row with no collected transcript an absent one rather than dropping the field", () => {
+        // A consumer iterating rows must not have to tell "no transcript" from "no such key".
+        const json = JSON.parse(reportsToJson(rowsFor("a", "b"), { a: transcript("for-a") }));
+        expect(json.reports[1].transcript).toMatchObject({ available: false, absence: "none" });
+    });
+
+    it("says when transcripts were not collected at all, which no row can show", () => {
+        const json = JSON.parse(reportsToJson(rowsFor("a")));
+        expect(json.transcriptsIncluded).toBe(false);
+        expect(json.reports[0].transcript).toBeUndefined();
     });
 });

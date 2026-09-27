@@ -5,10 +5,13 @@
  * tab, 120 work" — and that table gets built in a spreadsheet or a notebook, not here. So the
  * export is wide: one row per extension, one column per surface, because that is the shape those
  * questions are asked in. JSON is offered alongside for anything the columns flatten away (notes,
- * timings, the legacy fields).
+ * timings, the legacy fields) and for the one thing no table can hold: the agent's transcript of
+ * each migration, attached to the row it belongs to, so a later pass over the failures can read
+ * what actually happened in each one.
  */
 import type { ReportRow, UiSurface } from "@extlens/protocol";
 import { UI_SURFACES } from "@extlens/analyzer/surfaces";
+import type { TranscriptExport } from "./collect-transcripts";
 
 /** Quoted only when it has to be, so the common case stays readable in a diff. */
 function csvCell(value: string | number | boolean | null | undefined): string {
@@ -106,8 +109,37 @@ export function reportsToCsv(rows: ReportRow[]): string {
     return lines.join("\n");
 }
 
-export function reportsToJson(rows: ReportRow[]): string {
-    return JSON.stringify({ exportedAt: new Date().toISOString(), count: rows.length, reports: rows }, null, 2);
+/**
+ * The JSON export, with each extension's agent transcript attached to its own row.
+ *
+ * Attached per row rather than kept in a sibling map: the whole reason to export transcripts is to
+ * read them against their outcome — "here are the failures, what do they have in common" — and a
+ * consumer that has to join two collections by id can get that join wrong. This one cannot.
+ *
+ * A row's `transcript` is null only when no transcripts were collected at all. Otherwise it is
+ * always an object, and `available`/`absence` say why it may be empty: a host that keeps no
+ * transcripts is a different fact from a migration that recorded nothing, and an axial pass over
+ * "the runs with no record" must not mix the two.
+ */
+export function reportsToJson(rows: ReportRow[], transcripts?: Record<string, TranscriptExport>): string {
+    const reports = transcripts
+        ? rows.map((row) => ({
+              ...row,
+              transcript: transcripts[row.report.extensionId] ?? { available: false, absence: "none", total: 0, summary: null, entries: [] },
+          }))
+        : rows;
+    return JSON.stringify(
+        {
+            exportedAt: new Date().toISOString(),
+            count: rows.length,
+            // Stated rather than inferred from the rows: "0 transcripts" and "transcripts were not
+            // collected" look identical from the data and mean opposite things.
+            transcriptsIncluded: transcripts !== undefined,
+            reports,
+        },
+        null,
+        2,
+    );
 }
 
 /** `extlens-reports-2026-09-14.csv` — dated, because exports accumulate. */
