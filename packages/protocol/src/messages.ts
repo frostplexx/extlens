@@ -651,6 +651,110 @@ export const TranscriptResultSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// models.list / runs.*
+// ---------------------------------------------------------------------------
+
+/**
+ * Creating and choosing runs, and the models available to run.
+ *
+ * A run is one model's attempt at one corpus. The host used to serve a single directory of migrated
+ * extensions, which made the model an invisible property of whatever was in it: comparing two meant
+ * stopping the host, changing its environment and starting again, with nothing in the results
+ * recording which was which. These methods make a run a named thing the client can create, list and
+ * switch between.
+ *
+ * All of it is optional. A host that cannot create runs — a plain folder of extensions, or one
+ * serving a single flat directory — answers -32601 and the client hides the run UI entirely.
+ */
+
+/** One model the provider will serve, for the picker in the new-run form. */
+export const ProviderModelSchema = z.object({
+  /** The id to send, without a provider prefix: "deepseek-v4-flash-0731". */
+  id: z.string().min(1),
+  /** A nicer name when the provider gives one; otherwise the id again. */
+  name: z.string().min(1),
+});
+
+/**
+ * What the endpoint says it serves.
+ *
+ * A list, never a restriction: the client may send any model string, because a provider's list can
+ * be stale, incomplete, or unavailable exactly when a new model is the thing worth trying. `error`
+ * carries why a fetch failed so the form can say "could not reach the provider, type a name" rather
+ * than showing an empty menu that looks like "no models exist".
+ */
+export const ModelsListResultSchema = z.object({
+  models: z.array(ProviderModelSchema),
+  /** Prefix applied to a bare id to form the model spec — "saia" gives "saia/<id>". */
+  provider: z.string(),
+  /** The endpoint asked, so a surprising list can be traced to where it came from. */
+  endpoint: z.string().nullable().default(null),
+  fetchedAt: z.string().nullable().default(null),
+  error: z.string().nullable().default(null),
+});
+
+/** One run, as the runs list shows it. */
+export const RunInfoSchema = z.object({
+  /** Directory name, and the selector: "20260929-143210-deepseek-v4-flash". */
+  id: z.string().min(1),
+  /** Fully qualified `provider/id`. */
+  model: z.string().min(1),
+  /** The MV2 corpus it ran over. Two runs are only comparable when these match. */
+  corpus: z.string(),
+  /** Free text from whoever created it: "same model, new prompt". */
+  label: z.string().nullable().default(null),
+  createdAt: z.string(),
+  /** The run being served right now. Exactly one, whenever the host has any runs. */
+  active: z.boolean(),
+  /** Extensions with a migrated tree on disk. */
+  extensions: z.number().int().nonnegative().default(0),
+  /** Of those, how many the harness verified, and how many a human has reviewed. */
+  migrated: z.number().int().nonnegative().default(0),
+  reviewed: z.number().int().nonnegative().default(0),
+  /**
+   * The environment the run's containers get, minus the key.
+   *
+   * Carried because "which model" does not explain a difference between two runs of the SAME model,
+   * and a context window or a thinking level does. Weeks later nothing else remembers.
+   */
+  settings: z.record(z.string(), z.string()).default({}),
+});
+
+export const RunsListResultSchema = z.object({
+  runs: z.array(RunInfoSchema),
+  /**
+   * The corpus a new run gets when it does not name one: whatever the host was started with. Null
+   * when the host has none, in which case the form must ask for one.
+   */
+  defaultCorpus: z.string().nullable().default(null),
+});
+
+/**
+ * A new run. Only the model is required; everything else falls back to the host's own configuration,
+ * so the common case is typing a model name and pressing start.
+ */
+export const RunCreateParamsSchema = z.object({
+  /** Bare id or `provider/id`; the host qualifies a bare one with its default provider. */
+  model: z.string().min(1),
+  corpus: z.string().optional(),
+  label: z.string().optional(),
+  baseUrl: z.string().optional(),
+  thinking: z.string().optional(),
+  numCtx: z.number().int().positive().optional(),
+  temperature: z.number().optional(),
+});
+
+export const RunSelectParamsSchema = z.object({ id: z.string().min(1) });
+
+/**
+ * Deleting a run removes its migrated trees, reports and transcripts for good.
+ *
+ * The active run cannot be deleted: the host always serves one, and tearing down what is on screen
+ * from underneath the client is worse than asking it to select another first.
+ */
+export const RunDeleteParamsSchema = z.object({ id: z.string().min(1) });
+
+// ---------------------------------------------------------------------------
 // Method registry
 // ---------------------------------------------------------------------------
 
@@ -702,6 +806,29 @@ export const MethodsSchema = {
   "transcript.get": {
     params: TranscriptParamsSchema,
     result: TranscriptResultSchema,
+  },
+  "models.list": {
+    params: undefined,
+    result: ModelsListResultSchema,
+  },
+  // Each answers with the whole list rather than an acknowledgement: creating, selecting and
+  // deleting all change which run the host serves, so the client needs the new state in the same
+  // round trip and treats it like a reconnection.
+  "runs.list": {
+    params: undefined,
+    result: RunsListResultSchema,
+  },
+  "runs.create": {
+    params: RunCreateParamsSchema,
+    result: RunsListResultSchema,
+  },
+  "runs.select": {
+    params: RunSelectParamsSchema,
+    result: RunsListResultSchema,
+  },
+  "runs.delete": {
+    params: RunDeleteParamsSchema,
+    result: RunsListResultSchema,
   },
 } as const;
 

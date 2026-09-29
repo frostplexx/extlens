@@ -11,6 +11,9 @@ import type {
   ExtensionProfile,
   TranscriptParams,
   TranscriptResult,
+  ModelsListResult,
+  RunCreateParams,
+  RunsListResult,
 } from "@extlens/protocol";
 import type { ExtensionSource } from "@extlens/analyzer";
 
@@ -105,4 +108,33 @@ export interface Backend {
    * summary with `summarizeTranscript` over every entry, not over the returned page.
    */
   getTranscript?(params: TranscriptParams): Promise<TranscriptResult | null>;
+
+  /**
+   * The models the host's provider will serve, for a client offering a choice.
+   *
+   * Advisory, not a restriction: `createRun` accepts any model string, because a provider's list
+   * goes stale exactly when a new model is the thing worth trying. A host that cannot ask its
+   * provider answers -32601, or returns an empty list with `error` set when the ask failed.
+   */
+  listModels?(): Promise<ModelsListResult>;
+
+  /**
+   * Runs: one model's attempt at one corpus, created on demand.
+   *
+   * Optional as a group — implement all four or none. A host serving a single fixed directory of
+   * migrated extensions answers -32601 and the client hides the run UI.
+   *
+   * All four answer with the whole list, because creating, selecting and deleting each change which
+   * run the host serves and the client needs the new state in one round trip.
+   *
+   * `createRun` makes an empty run and makes it active; it does NOT start migrating — the client
+   * then drives `host.startAll` as it would for any corpus. `selectRun` and `deleteRun` are
+   * expected to REFUSE while a job is running (RpcError with HOST_BUSY), since re-pointing the served
+   * root under a container writing into it would mix two runs' results. Deleting the ACTIVE run is
+   * refused too: the host always serves one. An unknown id is UNKNOWN_EXTENSION.
+   */
+  listRuns?(): Promise<RunsListResult>;
+  createRun?(params: RunCreateParams): Promise<RunsListResult>;
+  selectRun?(id: string): Promise<RunsListResult>;
+  deleteRun?(id: string): Promise<RunsListResult>;
 }

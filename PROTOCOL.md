@@ -493,6 +493,63 @@ TranscriptEntry:
   gone from the model's context, and a reader who cannot see that happened will read the summary
   as the model's own words.
 
+## Runs (optional)
+
+A **run** is one model's attempt at one corpus. A host that serves a single fixed directory of migrated
+extensions answers `-32601` to all of these and the client hides the run UI.
+
+### models.list
+
+The models the host's provider will serve, for the new-run form. No params.
+
+| field       | type    | notes                                                     |
+|-------------|---------|-----------------------------------------------------------|
+| models[].id | string  | the id to send, without a provider prefix                 |
+| models[].name | string | a nicer name when the provider gives one, else the id    |
+| provider    | string  | prefix applied to a bare id — "saia" gives "saia/<id>"    |
+| endpoint    | string? | the URL asked, so a surprising list can be traced          |
+| fetchedAt   | string? | when it was fetched; null when the fetch failed            |
+| error       | string? | why it failed, for a form that should say so               |
+
+Advisory, never a restriction: `runs.create` accepts any model string, because a provider's list goes
+stale exactly when a newly published model is the thing worth trying. A failed fetch is an empty list
+plus `error`, not an RPC error — the form falls back to free text.
+
+### runs.list / runs.create / runs.select / runs.delete
+
+All four answer the same result, because creating, selecting and deleting each change which run the
+host serves and the client needs the new state in one round trip:
+
+| field             | type    | notes                                                   |
+|-------------------|---------|---------------------------------------------------------|
+| runs[].id         | string  | directory name and selector, `<date>-<time>-<model>`  |
+| runs[].model      | string  | fully qualified `provider/id`                         |
+| runs[].corpus     | string  | the MV2 corpus; two runs compare only if these match    |
+| runs[].label      | string? | free text from whoever made it                          |
+| runs[].createdAt  | string  | ISO 8601                                                |
+| runs[].active     | bool    | the run being served; exactly one when any exist        |
+| runs[].extensions | int     | extensions with a migrated tree on disk                 |
+| runs[].migrated   | int     | of those, how many the harness verified                 |
+| runs[].reviewed   | int     | of those, how many a human reviewed                     |
+| runs[].settings   | object  | the run's resolved environment, minus the API key       |
+| defaultCorpus     | string? | corpus a new run gets when it names none                |
+
+`runs.create` takes `{ model, corpus?, label?, baseUrl?, thinking?, numCtx?, temperature? }`. Only
+the model is required; the host qualifies a bare id with its default provider and fills the rest from
+its own configuration. It creates an EMPTY run and makes it active — it does not start migrating, so
+the client then drives `host.startAll` as it would for any corpus.
+
+`runs.select` and `runs.delete` take `{ id }`.
+
+Selecting changes **what the host serves**, not only what the next migration uses, so the client must
+refetch and drop any selection: a row id usually exists in both runs, and reusing it would show one
+run's data under the other's name.
+
+Errors: `409` (HOST_BUSY) from create, select and delete while a job is running — re-pointing the
+served root under a container writing into it mixes two runs' results. `404` for an unknown id.
+`-32602` when deleting the ACTIVE run, which is refused because the host always serves one, and when
+a corpus does not exist or a model string is unusable.
+
 ## Documented future methods
 
 The server MUST answer these with `-32601` (method not found) in v1. The
@@ -503,6 +560,8 @@ protocol reserves their names so hosts can detect a newer client.
 - HTTP file plane — `http(s)://` file references (phase 2).
 
 ## Changelog
+
+- v10 — runs: `models.list` (what the provider serves, advisory) plus `runs.list`/`create`/`select`/`delete`. A run is one model's attempt at one corpus, created on demand and served one at a time. `Backend.listRuns`/`createRun`/`selectRun`/`deleteRun` are optional as a group; a host serving one fixed directory answers `-32601`. Selecting changes which run the host serves, so the result is the full list and clients treat a switch like a reconnection.
 
 - v9 — `transcript.get`: the migration agent's conversation, tool calls, thinking and failures for one extension, normalized by the host into `TranscriptEntry` and paged. `Backend.getTranscript` is optional; hosts without an agent answer `-32601`, hosts with one but no record answer `available: false`. `summarizeTranscript` derives the headline numbers so they mean the same thing on every host.
 - v8 — `extensions.list` params gain an optional `filter`: report verdicts, unreviewed rows, and whether an MV3 build exists. OR within a facet, AND between them; applied before paging and before `stats`. `matchesListFilter` applies it identically on every host.

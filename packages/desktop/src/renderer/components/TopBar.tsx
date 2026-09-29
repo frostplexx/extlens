@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { platform, type BridgeStatus } from "../bridge";
+import type { RunsState } from "../hooks/useRuns";
 import type { AppMode, SessionState } from "../types";
 import { cn } from "@/lib/utils";
 
@@ -29,6 +30,7 @@ export function TopBar({
     onModeChange,
     onExport,
     exporting,
+    runs,
 }: {
     status: BridgeStatus;
     session: SessionState | null;
@@ -38,6 +40,8 @@ export function TopBar({
     onModeChange: (mode: AppMode) => void;
     onExport: () => void;
     exporting: boolean;
+    /** The host's runs, when it manages any. */
+    runs: RunsState;
 }) {
     const os = platform();
     // Recomputed each render so the estimate tracks the poll rather than freezing at its first value.
@@ -169,8 +173,30 @@ export function TopBar({
                 </Tooltip>
 
                 {/* Which model produced this corpus. A results table that cannot name its model is
-                    not a result, and nothing else on screen says which one ran. */}
-                {host.model ? (
+                    not a result, and nothing else on screen says which one ran. Switchable on a host
+                    that serves a suite; a plain badge on one with a single fixed model. */}
+                {/* The run on screen, and the way to the rest of them. A results table that cannot
+                    name its model is not a result, and nothing else here says which one produced this. */}
+                {runs.supported ? (
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button
+                                size="sm"
+                                variant={mode === "runs" ? "secondary" : "outline"}
+                                onClick={() => onModeChange("runs")}
+                                className="hidden min-w-0 max-w-64 shrink lg:inline-flex"
+                            >
+                                <Cpu className="size-3.5 shrink-0" />
+                                <span className="truncate">{runs.active?.model ?? "no run"}</span>
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            {runs.active
+                                ? `Showing ${runs.active.id} — click for every run`
+                                : "No run yet — click to create one"}
+                        </TooltipContent>
+                    </Tooltip>
+                ) : host.model ? (
                     <Tooltip>
                         <TooltipTrigger asChild>
                             <Badge variant="outline" className="hidden min-w-0 max-w-56 shrink font-normal xl:inline-flex">

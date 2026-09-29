@@ -7,7 +7,7 @@ export type BrowserLabel = "mv2" | "mv3";
  * What the page is for right now: browsing the corpus, working a review queue, reading code,
  * reading the agent's transcript of a migration, or settings.
  */
-export type AppMode = "browse" | "review" | "code" | "transcript" | "settings";
+export type AppMode = "browse" | "review" | "code" | "transcript" | "settings" | "runs";
 
 export interface DownloadPrompt {
     label: BrowserLabel;

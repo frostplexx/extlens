@@ -173,6 +173,30 @@ export async function dispatch(backend: Backend, request: RpcRequest): Promise<R
         result = transcript;
         break;
       }
+      case "models.list": {
+        if (!backend.listModels) {
+          throw new RpcError(ErrorCodes.METHOD_NOT_FOUND, "this host cannot list the provider's models");
+        }
+        result = await backend.listModels();
+        break;
+      }
+      case "runs.list":
+      case "runs.create":
+      case "runs.select":
+      case "runs.delete": {
+        // All four or none: a client that could list runs but not select one would show a history it
+        // cannot open, and one that could create without listing would lose every run it made.
+        if (!backend.listRuns || !backend.createRun || !backend.selectRun || !backend.deleteRun) {
+          throw new RpcError(ErrorCodes.METHOD_NOT_FOUND, "this host does not manage runs");
+        }
+        if (request.method === "runs.list") result = await backend.listRuns();
+        else if (request.method === "runs.create") result = await backend.createRun(params as never);
+        else {
+          const { id } = params as { id: string };
+          result = request.method === "runs.select" ? await backend.selectRun(id) : await backend.deleteRun(id);
+        }
+        break;
+      }
       case "analysis.explain": {
         if (!backend.explainFailure) {
           throw new RpcError(ErrorCodes.METHOD_NOT_FOUND, "this host has no model configured to explain failures");

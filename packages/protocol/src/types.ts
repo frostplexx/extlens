@@ -29,6 +29,13 @@ import type {
   TranscriptUsageSchema,
   TranscriptParamsSchema,
   TranscriptResultSchema,
+  ProviderModelSchema,
+  ModelsListResultSchema,
+  RunInfoSchema,
+  RunsListResultSchema,
+  RunCreateParamsSchema,
+  RunSelectParamsSchema,
+  RunDeleteParamsSchema,
   SurfaceResultSchema,
   SurfaceStatusSchema,
   UiSurfaceSchema,
@@ -78,3 +85,11 @@ export type TranscriptSummary = z.infer<typeof TranscriptSummarySchema>;
 export type TranscriptUsage = z.infer<typeof TranscriptUsageSchema>;
 export type TranscriptParams = z.infer<typeof TranscriptParamsSchema>;
 export type TranscriptResult = z.infer<typeof TranscriptResultSchema>;
+
+export type ProviderModel = z.infer<typeof ProviderModelSchema>;
+export type ModelsListResult = z.infer<typeof ModelsListResultSchema>;
+export type RunInfo = z.infer<typeof RunInfoSchema>;
+export type RunsListResult = z.infer<typeof RunsListResultSchema>;
+export type RunCreateParams = z.infer<typeof RunCreateParamsSchema>;
+export type RunSelectParams = z.infer<typeof RunSelectParamsSchema>;
+export type RunDeleteParams = z.infer<typeof RunDeleteParamsSchema>;

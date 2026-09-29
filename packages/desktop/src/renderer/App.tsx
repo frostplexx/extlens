@@ -7,7 +7,7 @@
  */
 import * as React from "react";
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
-import type { ExplainResult, ReportDraft } from "@extlens/protocol";
+import type { ExplainResult, ReportDraft, RunInfo } from "@extlens/protocol";
 import { listFilterIsEmpty } from "@extlens/protocol";
 import { ChevronLeft, ChevronRight, FilterX, PackageOpen, SearchX } from "lucide-react";
 import { toast } from "sonner";
@@ -27,12 +27,15 @@ import { useHostJob } from "./hooks/useHostJob";
 import { useProfile } from "./hooks/useProfile";
 import { useReviewQueue } from "./hooks/useReviewQueue";
 import { useTranscript } from "./hooks/useTranscript";
+import { useRuns } from "./hooks/useRuns";
 import { DetailPane } from "./components/DetailPane";
 import { ExtensionTable } from "./components/ExtensionTable";
 import { LogDock } from "./components/LogDock";
 import { ReviewView } from "./components/ReviewView";
 import { Toolbar } from "./components/Toolbar";
 import { TranscriptView } from "./components/TranscriptView";
+import { RunsView } from "./components/RunsView";
+import { NewRunDialog } from "./components/NewRunDialog";
 import { TopBar } from "./components/TopBar";
 import { SecretPromptDialog } from "./components/Connection";
 import { SettingsView } from "./components/SettingsView";
@@ -55,7 +58,8 @@ export function App() {
      * or changing a browser path mid-pass.
      */
     const [returnTo, setReturnTo] = useState<"browse" | "review">("browse");
-    const driving = mode === "code" || mode === "settings" || mode === "transcript" ? returnTo : mode;
+    const driving =
+        mode === "code" || mode === "settings" || mode === "transcript" || mode === "runs" ? returnTo : mode;
     const [codeTarget, setCodeTarget] = useState<CodeTarget | null>(null);
     const [autoLaunch, setAutoLaunch] = useState(true);
 
@@ -76,6 +80,48 @@ export function App() {
     // prefetching one per selected row would pull megabytes nobody asked to read.
     const transcript = useTranscript(bridge, subjectId, connected, mode === "transcript");
     const host = useHostJob(bridge, connected, list.refresh);
+
+    /**
+     * Switching run switches the corpus: the host serves one run at a time, so everything fetched so
+     * far belongs to the run that was active when it was fetched.
+     *
+     * Hence the selection is dropped rather than kept. The same extension id usually exists in both
+     * runs, so keeping it would look harmless and show the previous run's profile, report and
+     * transcript under the new run's name until each hook happened to refetch — a wrong answer that
+     * looks like a right one, which is the only kind worth going out of the way to prevent. Back to
+     * Browse for the same reason: Review's queue belongs to the old run.
+     */
+    const runs = useRuns(
+        bridge,
+        connected,
+        useCallback(
+            (active: RunInfo) => {
+                list.select(null);
+                list.refresh();
+                setMode("browse");
+                toast.success(`Now showing ${active.model}`, { description: active.label ?? active.id });
+            },
+            [list],
+        ),
+    );
+    const [newRunOpen, setNewRunOpen] = useState(false);
+
+    /**
+     * Create the run, then start it.
+     *
+     * Two calls because they are two things that can fail differently: a corpus that will not start
+     * still leaves a run on disk to look at, rather than the click having done nothing. The dialog
+     * closes as soon as the run exists, since the log dock is where the rest of it is watched.
+     */
+    const startNewRun = useCallback(
+        async (params: { model: string; corpus?: string; label?: string }) => {
+            const created = await runs.create(params);
+            if (!created) return;
+            setNewRunOpen(false);
+            bridge.call("host.startAll").catch((e: Error) => toast.error(e.message));
+        },
+        [bridge, runs],
+    );
 
     const [logOpen, setLogOpen] = useState(false);
     const [exporting, setExporting] = useState(false);
@@ -126,7 +172,7 @@ export function App() {
     const changeMode = useCallback(
         (next: AppMode) => {
             if (next === "code") openInCode(null, null);
-            else if (next === "transcript" || next === "settings") {
+            else if (next === "transcript" || next === "settings" || next === "runs") {
                 setMode((current) => {
                     if (current === "browse" || current === "review") setReturnTo(current);
                     return next;
@@ -310,7 +356,14 @@ export function App() {
      * shares a resizable split; closed, it is a fixed bar underneath — and the body itself does
      * not care which.
      */
-    const body = mode === "transcript" ? (
+    const body = mode === "runs" ? (
+                    <RunsView
+                        runs={runs}
+                        onExit={exitDetour}
+                        onNewRun={() => setNewRunOpen(true)}
+                        running={host.running}
+                    />
+                ) : mode === "transcript" ? (
                     <TranscriptView
                         transcript={transcript}
                         subjectId={subjectId}
@@ -496,9 +549,27 @@ export function App() {
                     onModeChange={changeMode}
                     onExport={exportReports}
                     exporting={exporting}
+                    runs={runs}
                 />
 
                 <div className="flex min-h-0 flex-1 flex-col">{body}</div>
+
+                {runs.supported ? (
+                    <NewRunDialog
+                        open={newRunOpen}
+                        onOpenChange={setNewRunOpen}
+                        runs={runs}
+                        onStart={startNewRun}
+                        onPickCorpus={() =>
+                            bridge
+                                .call<{ path: string | null }>("local.app.pickDirectory", {
+                                    title: "Choose a corpus of MV2 extensions",
+                                })
+                                .then((r) => r.path)
+                                .catch(() => null)
+                        }
+                    />
+                ) : null}
 
                 {/* Sizes itself; see LogDock for why that is not a panel group. */}
                 <LogDock
