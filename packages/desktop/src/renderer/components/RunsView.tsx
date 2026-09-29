@@ -64,12 +64,6 @@ export function RunsView({
             {runs.error ? (
                 <p className="border-b bg-destructive/10 px-4 py-2 text-sm text-destructive">{runs.error}</p>
             ) : null}
-            {running ? (
-                <p className="border-b bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
-                    A migration is running. Switching or deleting a run is refused until it stops — it would
-                    put two runs' output in one place.
-                </p>
-            ) : null}
 
             {runs.runs.length === 0 ? (
                 <Empty className="flex-1">

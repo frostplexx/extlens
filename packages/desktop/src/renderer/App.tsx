@@ -79,7 +79,6 @@ export function App() {
     // Only fetched while the tab is open: a transcript is the largest thing a host serves, and
     // prefetching one per selected row would pull megabytes nobody asked to read.
     const transcript = useTranscript(bridge, subjectId, connected, mode === "transcript");
-    const host = useHostJob(bridge, connected, list.refresh);
 
     /**
      * Switching run switches the corpus: the host serves one run at a time, so everything fetched so
@@ -104,6 +103,9 @@ export function App() {
             [list],
         ),
     );
+    // Declared after `runs` because it needs the active run's id: a host with no run has nothing to
+    // start, and only a change of run can turn that around.
+    const host = useHostJob(bridge, connected, list.refresh, runs.active?.id ?? null);
     const [newRunOpen, setNewRunOpen] = useState(false);
 
     /**
@@ -118,9 +120,11 @@ export function App() {
             const created = await runs.create(params);
             if (!created) return;
             setNewRunOpen(false);
-            bridge.call("host.startAll").catch((e: Error) => toast.error(e.message));
+            // Through the hook rather than the bridge: a raw call would start the migration while
+            // leaving the controls hidden and the dock empty, which is exactly how this failed first.
+            host.start().catch((e: Error) => toast.error(e.message));
         },
-        [bridge, runs],
+        [host, runs],
     );
 
     const [logOpen, setLogOpen] = useState(false);
@@ -550,6 +554,7 @@ export function App() {
                     onExport={exportReports}
                     exporting={exporting}
                     runs={runs}
+                    onNewRun={() => setNewRunOpen(true)}
                 />
 
                 <div className="flex min-h-0 flex-1 flex-col">{body}</div>

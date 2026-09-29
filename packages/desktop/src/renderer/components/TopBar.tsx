@@ -9,7 +9,7 @@
  */
 import * as React from "react";
 import type { HostStatus } from "@extlens/protocol";
-import { ClipboardCheck, Cpu, Download, FileCode2, Play, Plug, ScrollText, Settings, Square, Table2, Terminal } from "lucide-react";
+import { ChevronDown, ClipboardCheck, Cpu, Download, FileCode2, Play, Plug, Plus, ScrollText, Settings, Square, Table2, Terminal } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { estimate } from "@/lib/eta";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +31,7 @@ export function TopBar({
     onExport,
     exporting,
     runs,
+    onNewRun,
 }: {
     status: BridgeStatus;
     session: SessionState | null;
@@ -42,6 +43,8 @@ export function TopBar({
     exporting: boolean;
     /** The host's runs, when it manages any. */
     runs: RunsState;
+    /** Open the new-run form. */
+    onNewRun: () => void;
 }) {
     const os = platform();
     // Recomputed each render so the estimate tracks the poll rather than freezing at its first value.
@@ -86,6 +89,24 @@ export function TopBar({
                 </div>
 
                 <Separator orientation="vertical" className="h-5" />
+
+                {/*
+                  * With no run there is nothing to migrate, so the host controls are absent and this
+                  * slot would sit empty — the one place a first-time window has to offer something.
+                  * Same size and colour as the button it stands in for, because it is the primary
+                  * action in exactly the same way.
+                  */}
+                {!host.supported && runs.supported && !runs.active ? (
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button size="sm" variant="default" onClick={onNewRun} disabled={runs.busy}>
+                                <Plus className="size-4" />
+                                No run
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Nothing is being served yet — create a run to start one</TooltipContent>
+                    </Tooltip>
+                ) : null}
 
                 {host.supported ? (
                     <div className="flex items-center gap-3">
@@ -172,12 +193,11 @@ export function TopBar({
                     <TooltipContent>Download every saved report as CSV and JSON</TooltipContent>
                 </Tooltip>
 
-                {/* Which model produced this corpus. A results table that cannot name its model is
-                    not a result, and nothing else on screen says which one ran. Switchable on a host
-                    that serves a suite; a plain badge on one with a single fixed model. */}
-                {/* The run on screen, and the way to the rest of them. A results table that cannot
-                    name its model is not a result, and nothing else here says which one produced this. */}
-                {runs.supported ? (
+                {/* The run on screen, and the way to the rest of them: a results table that cannot
+                    name its model is not a result, and nothing else here says which one produced this.
+                    Only once a run exists — until then the primary button on the left is the one way
+                    in, and two controls saying "no run" is one too many. */}
+                {runs.active ? (
                     <Tooltip>
                         <TooltipTrigger asChild>
                             <Button
@@ -187,13 +207,14 @@ export function TopBar({
                                 className="hidden min-w-0 max-w-64 shrink lg:inline-flex"
                             >
                                 <Cpu className="size-3.5 shrink-0" />
-                                <span className="truncate">{runs.active?.model ?? "no run"}</span>
+                                <span className="truncate">{runs.active.model}</span>
+                                {/* Without this it reads as a label. It is the only way to the run
+                                    history, and the first person to use it went looking for one. */}
+                                <ChevronDown className="size-3 shrink-0 opacity-60" />
                             </Button>
                         </TooltipTrigger>
                         <TooltipContent>
-                            {runs.active
-                                ? `Showing ${runs.active.id} — click for every run`
-                                : "No run yet — click to create one"}
+                            Showing {runs.active.id} — click for past runs and to start a new one
                         </TooltipContent>
                     </Tooltip>
                 ) : host.model ? (
