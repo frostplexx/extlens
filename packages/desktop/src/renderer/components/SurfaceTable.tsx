@@ -74,7 +74,7 @@ export function SurfaceTable({
         return (
             <p className="text-sm text-muted-foreground">
                 No user-facing surfaces detected. If this extension clearly has UI, the host may be serving
-                profiles from an older build — restart it.
+                profiles from an older build. Restart it.
             </p>
         );
     }
@@ -249,7 +249,7 @@ function PageTargets({ matches, onOpenUrl }: { matches: string[]; onOpenUrl?: (u
                     // is a thing to check, not a gap in the data.
                     <span
                         key={pattern}
-                        title={`${pattern} — no single page represents this; try any site you would normally use`}
+                        title={`${pattern}: no single page represents this, so try any site you would normally use`}
                         className="rounded border px-2 py-0.5 text-xs text-muted-foreground"
                     >
                         any page ({pattern})
@@ -301,7 +301,7 @@ function IdleTimer({ hotkey = false }: { hotkey?: boolean }) {
             </Button>
             {running ? <span className="text-xs text-muted-foreground">Leave that browser alone…</span> : null}
             {remaining === 0 ? (
-                <span className="text-xs text-green">Idle long enough — use the surface again now.</span>
+                <span className="text-xs text-green">Idle long enough. Use the surface again.</span>
             ) : null}
         </div>
     );

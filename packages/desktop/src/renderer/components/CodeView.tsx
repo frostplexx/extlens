@@ -134,7 +134,7 @@ export function CodeView({
                         <FileQuestion />
                     </EmptyMedia>
                     <EmptyTitle>No extension to show</EmptyTitle>
-                    <EmptyDescription>Pick one in Browse first; Code mode shows whatever is selected there.</EmptyDescription>
+                    <EmptyDescription>Pick one in Browse first.</EmptyDescription>
                 </EmptyHeader>
                 <Button variant="outline" onClick={onExit}>
                     <ArrowLeft className="size-4" />
@@ -233,7 +233,7 @@ export function CodeView({
                                                 <EmptyHeader>
                                                     <EmptyTitle>Binary file</EmptyTitle>
                                                     <EmptyDescription>
-                                                        {formatBytes(entry.size.mv3 ?? entry.size.mv2 ?? 0)} — nothing to read here.
+                                                        {formatBytes(entry.size.mv3 ?? entry.size.mv2 ?? 0)}, nothing to read.
                                                     </EmptyDescription>
                                                 </EmptyHeader>
                                             </Empty>

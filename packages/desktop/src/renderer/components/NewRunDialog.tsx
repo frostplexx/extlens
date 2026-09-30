@@ -76,7 +76,7 @@ export function NewRunDialog({
                 <DialogHeader>
                     <DialogTitle>New run</DialogTitle>
                     <DialogDescription>
-                        One model over one corpus. Its results stay separate from every other run.
+                        One model over one corpus.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -97,8 +97,7 @@ export function NewRunDialog({
                             {runs.models?.error ? (
                                 <span className="flex items-center gap-1.5 text-yellow">
                                     <AlertTriangle className="size-3.5 shrink-0" />
-                                    Could not reach {runs.models.endpoint ?? "the provider"} for a model list — type a
-                                    name.
+                                    No model list from the provider. Type a name.
                                 </span>
                             ) : (
                                 <>
@@ -106,7 +105,7 @@ export function NewRunDialog({
                                     <Mono>
                                         {runs.models?.provider ?? "saia"}/{model.trim() || "…"}
                                     </Mono>
-                                    . Any model the endpoint serves works, listed or not.
+                                    . Any model the endpoint serves works.
                                 </>
                             )}
                         </FieldDescription>
@@ -146,9 +145,7 @@ export function NewRunDialog({
                             </Button>
                         </div>
                         <FieldDescription>
-                            {runs.defaultCorpus
-                                ? "Empty uses the corpus the host was started with."
-                                : "This host has no default corpus, so a run must name one."}
+                            {runs.defaultCorpus ? "Empty uses the host's corpus." : "This host has no default corpus."}
                         </FieldDescription>
                     </Field>
 
@@ -163,7 +160,7 @@ export function NewRunDialog({
                         <FieldDescription>
                             {/* Two runs of one model over one corpus are a normal thing to do, and the
                                 model name cannot tell them apart afterwards. */}
-                            What makes this run different from the last one with the same model.
+                            What makes this run different from the last.
                         </FieldDescription>
                     </Field>
                 </FieldGroup>

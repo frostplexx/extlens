@@ -21,6 +21,7 @@ import type { ReportRow } from "@extlens/protocol";
 import { exportFilename, reportsToCsv, reportsToJson } from "./lib/export-reports";
 import { collectTranscripts } from "./lib/collect-transcripts";
 import { isTyping } from "./lib/hotkeys";
+import { connectionLine } from "./lib/connection";
 import { useBridge } from "./hooks/useBridge";
 import { useExtensions } from "./hooks/useExtensions";
 import { useHostJob } from "./hooks/useHostJob";
@@ -222,7 +223,7 @@ export function App() {
                     bridge.call,
                     r.reports.map((row) => row.report.extensionId),
                     (done, total) =>
-                        toast.loading(`Collecting transcripts — ${done} of ${total}`, {
+                        toast.loading(`Collecting transcripts: ${done} of ${total}`, {
                             id: progress,
                             duration: Infinity,
                         }),
@@ -477,6 +478,14 @@ export function App() {
                                     onSort={list.setSort}
                                     onSelect={list.select}
                                     loading={list.loading}
+                                    onOpenCode={(id) => {
+                                        list.select(id);
+                                        openInCode(null, null);
+                                    }}
+                                    onOpenTranscript={(id) => {
+                                        list.select(id);
+                                        changeMode("transcript");
+                                    }}
                                 />
                             )}
 
@@ -540,8 +549,6 @@ export function App() {
         <TooltipProvider delayDuration={300}>
             <div className="flex h-full flex-col bg-background text-foreground">
                 <TopBar
-                    status={bridge.status}
-                    session={bridge.session}
                     host={{
                         status: host.status,
                         supported: host.supported,
@@ -583,6 +590,8 @@ export function App() {
                     status={host.status}
                     lines={host.logs}
                     error={host.error}
+                    model={runs.active?.model ?? host.status?.model ?? null}
+                    connection={connectionLine(bridge.status, bridge.session)}
                 />
 
                 <SecretPromptDialog session={bridge.session} bridge={bridge} />

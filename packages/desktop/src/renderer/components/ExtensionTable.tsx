@@ -17,7 +17,15 @@ import {
     type ColumnDef,
     type SortingState,
 } from "@tanstack/react-table";
-import { ArrowDown, ArrowUp, CheckCircle2, ChevronsUpDown, FileUp } from "lucide-react";
+import { ArrowDown, ArrowUp, CheckCircle2, ChevronsUpDown, Copy, FileCode2, FileUp, ScrollText } from "lucide-react";
+import { Kbd } from "@/components/ui/kbd";
+import {
+    ContextMenu,
+    ContextMenuContent,
+    ContextMenuItem,
+    ContextMenuSeparator,
+    ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -46,6 +54,8 @@ export function ExtensionTable({
     onSort,
     onSelect,
     loading,
+    onOpenCode,
+    onOpenTranscript,
 }: {
     rows: ExtensionLight[];
     selectedId: string | null;
@@ -53,6 +63,9 @@ export function ExtensionTable({
     onSort: (sort: SortOrder) => void;
     onSelect: (id: string) => void;
     loading: boolean;
+    /** Per-row destinations. They live in the row's own menu, not in a global tab strip. */
+    onOpenCode: (id: string) => void;
+    onOpenTranscript: (id: string) => void;
 }) {
     const selectedRef = useRef<HTMLTableRowElement>(null);
 
@@ -167,20 +180,47 @@ export function ExtensionTable({
                           ))
                         : table.getRowModel().rows.map((row) => {
                               const selected = row.original.id === selectedId;
+                              const id = row.original.id;
                               return (
-                                  <TableRow
-                                      key={row.id}
-                                      ref={selected ? selectedRef : undefined}
-                                      onClick={() => onSelect(row.original.id)}
-                                      data-state={selected ? "selected" : undefined}
-                                      className="cursor-pointer"
-                                  >
-                                      {row.getVisibleCells().map((cell) => (
-                                          <TableCell key={cell.id} className="max-w-0 overflow-hidden">
-                                              {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                                          </TableCell>
-                                      ))}
-                                  </TableRow>
+                                  <ContextMenu key={row.id}>
+                                      <ContextMenuTrigger asChild>
+                                          <TableRow
+                                              ref={selected ? selectedRef : undefined}
+                                              onClick={() => onSelect(id)}
+                                              // Right-clicking a row acts on that row, so it selects
+                                              // first. Otherwise the menu would open over one
+                                              // extension and its items would open another.
+                                              onContextMenu={() => onSelect(id)}
+                                              data-state={selected ? "selected" : undefined}
+                                              className="cursor-pointer"
+                                          >
+                                              {row.getVisibleCells().map((cell) => (
+                                                  <TableCell key={cell.id} className="max-w-0 overflow-hidden">
+                                                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                                                  </TableCell>
+                                              ))}
+                                          </TableRow>
+                                      </ContextMenuTrigger>
+                                      <ContextMenuContent>
+                                          {/* The keys still work; they used to be discoverable from
+                                              the tab strip these items replaced. */}
+                                          <ContextMenuItem onSelect={() => onOpenCode(id)}>
+                                              <FileCode2 />
+                                              Code
+                                              <Kbd className="ml-auto">c</Kbd>
+                                          </ContextMenuItem>
+                                          <ContextMenuItem onSelect={() => onOpenTranscript(id)}>
+                                              <ScrollText />
+                                              Transcript
+                                              <Kbd className="ml-auto">t</Kbd>
+                                          </ContextMenuItem>
+                                          <ContextMenuSeparator />
+                                          <ContextMenuItem onSelect={() => void navigator.clipboard.writeText(id)}>
+                                              <Copy />
+                                              Copy ID
+                                          </ContextMenuItem>
+                                      </ContextMenuContent>
+                                  </ContextMenu>
                               );
                           })}
                 </TableBody>

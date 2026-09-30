@@ -101,6 +101,16 @@ function trustedUrl(url: string): boolean {
     return url.startsWith(`${ORIGIN}/`) || (DEV_URL !== null && url.startsWith(DEV_URL));
 }
 
+/*
+ * The app's own name, set before anything reads it.
+ *
+ * A packaged build takes it from the bundle, but an unpackaged one runs inside the Electron binary
+ * and inherits its name: the macOS menu bar, the About panel and the dock all say "Electron". The
+ * menu is built from app.name at startup, so this has to happen before the ready event rather than
+ * alongside the window.
+ */
+app.setName("extlens");
+
 // A second copy would spawn a second set of browsers over the same corpus.
 if (!app.requestSingleInstanceLock()) {
     app.quit();
@@ -113,6 +123,8 @@ if (!app.requestSingleInstanceLock()) {
 
 async function main(): Promise<void> {
     await app.whenReady();
+    // The About panel reads its own copy of the name, which setName does not reach.
+    app.setAboutPanelOptions({ applicationName: "extlens" });
     protocol.handle(SCHEME, (request) => serve(request, RENDERER_DIST));
 
     let window: BrowserWindow | null = null;

@@ -1,29 +1,28 @@
 /**
- * The application bar: identity, host controls, and the two connection states. It is also the
- * window's title bar — the native one is hidden — so it is a drag region, and it leaves room for
- * the window controls the OS draws over it: traffic lights on the left on macOS, the overlay on
- * the right elsewhere.
+ * The application bar: identity, the run controls, and where to go.
  *
- * The host link is also the way to change it: the status pill goes to settings, because "not
- * connected" and "connect somewhere else" are the same moment.
+ * Controls only. Standing status (which model, which host) sits in the log dock instead, where it
+ * can be read without being clickable: both used to be buttons here, and the host pill was a second
+ * route to the settings gear beside it.
+ *
+ * It is also the window's title bar, since the native one is hidden, so it is a drag region and it
+ * leaves room for the window controls the OS draws over it: traffic lights on the left on macOS, the
+ * overlay on the right elsewhere.
  */
 import * as React from "react";
 import type { HostStatus } from "@extlens/protocol";
-import { ChevronDown, ClipboardCheck, Cpu, Download, FileCode2, Play, Plug, Plus, ScrollText, Settings, Square, Table2, Terminal } from "lucide-react";
+import { ClipboardCheck, Download, Layers, Play, Plus, Settings, Square, Table2, Terminal } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { estimate } from "@/lib/eta";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { platform, type BridgeStatus } from "../bridge";
+import { platform } from "../bridge";
 import type { RunsState } from "../hooks/useRuns";
-import type { AppMode, SessionState } from "../types";
+import type { AppMode } from "../types";
 import { cn } from "@/lib/utils";
 
 export function TopBar({
-    status,
-    session,
     host,
     onToggleHost,
     mode,
@@ -33,8 +32,6 @@ export function TopBar({
     runs,
     onNewRun,
 }: {
-    status: BridgeStatus;
-    session: SessionState | null;
     host: { status: HostStatus | null; supported: boolean; running: boolean; model?: string | null };
     onToggleHost: () => void;
     mode: AppMode;
@@ -52,28 +49,13 @@ export function TopBar({
     // difference between them is what lets the estimate count down instead of drifting up.
     const eta = estimate(host.status?.progress, Date.now(), host.status?.startedAt);
 
-    const target = session?.target ?? null;
-    const where = target === null ? "no host" : target.kind === "ssh" ? `ssh ${target.destination}` : target.url;
-    const link =
-        status !== "open"
-            ? { dot: "bg-destructive", label: `bridge ${status}`, hint: "the app's own process is not answering" }
-            : session?.connection === "connected"
-              ? { dot: "bg-green", label: where, hint: "connected to the extlens host — click to change in settings" }
-              : target === null
-                ? { dot: "bg-secondary-foreground/40", label: where, hint: "click to choose a host in settings" }
-                : {
-                      dot: "bg-peach",
-                      label: `${where} · ${session?.tunnel && session.tunnel !== "up" ? `tunnel ${session.tunnel}` : (session?.connection ?? "…")}`,
-                      hint: session?.message ?? "cannot reach the host — click to change it in settings",
-                  };
-
     return (
         /*
-         * Three bands: identity and host controls left, the mode switch centred, status right.
-         * A grid with equal outer columns keeps the switch centred as the left and right bands
-         * change width — a control that moves when a migration starts is a control you have to
-         * look for — but, unlike absolute centring, gives the bands room first: on a narrow window
-         * the switch shifts rather than sitting under the export button.
+         * Three bands: run controls left, the mode switch centred, export and settings right.
+         * A grid with equal outer columns keeps the switch centred as the bands change width, since
+         * a control that moves when a migration starts is a control you have to look for. Unlike
+         * absolute centring it gives the bands room first, so on a narrow window the switch shifts
+         * rather than sitting under the export button.
          */
         <header
             className={cn(
@@ -91,54 +73,54 @@ export function TopBar({
                 <Separator orientation="vertical" className="h-5" />
 
                 {/*
-                  * With no run there is nothing to migrate, so the host controls are absent and this
-                  * slot would sit empty — the one place a first-time window has to offer something.
-                  * Same size and colour as the button it stands in for, because it is the primary
-                  * action in exactly the same way.
+                  * One group: the job control and the way to the runs list. Both act on the run, and
+                  * Runs was previously reachable only through the model chip, which did not look
+                  * like a button.
                   */}
-                {!host.supported && runs.supported && !runs.active ? (
+                <div className="flex items-center">
+                    {host.supported ? (
+                        <Button
+                            size="sm"
+                            variant={host.running ? "destructive" : "default"}
+                            onClick={onToggleHost}
+                            className="rounded-r-none"
+                        >
+                            {host.running ? <Square className="size-4" /> : <Play className="size-4" />}
+                            {host.running ? "Stop" : "Migrate all"}
+                        </Button>
+                    ) : (
+                        <Button size="sm" onClick={onNewRun} disabled={runs.busy} className="rounded-r-none">
+                            <Plus className="size-4" />
+                            New run
+                        </Button>
+                    )}
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <Button size="sm" variant="default" onClick={onNewRun} disabled={runs.busy}>
-                                <Plus className="size-4" />
-                                No run
+                            <Button
+                                size="sm"
+                                variant={mode === "runs" ? "secondary" : "outline"}
+                                onClick={() => onModeChange("runs")}
+                                className="rounded-l-none border-l-0"
+                            >
+                                <Layers className="size-4" />
+                                <span className="hidden md:inline">Runs</span>
                             </Button>
                         </TooltipTrigger>
-                        <TooltipContent>Nothing is being served yet — create a run to start one</TooltipContent>
+                        <TooltipContent>Past runs, and starting a new one</TooltipContent>
                     </Tooltip>
-                ) : null}
+                </div>
 
-                {host.supported ? (
-                    <div className="flex items-center gap-3">
-                        <Button size="sm" variant={host.running ? "destructive" : "default"} onClick={onToggleHost}>
-                            {host.running ? <Square className="size-4" /> : <Play className="size-4" />}
-                            {host.running ? "Stop migration" : "Migrate all"}
-                        </Button>
-                        {/*
-                          * Where the batch is, not which extension it happens to be on.
-                          *
-                          * The id is 32 random characters and the phase changes every few minutes;
-                          * neither answers the question someone glancing at a day-long run is asking,
-                          * which is how much is left. The log dock still has the detail.
-                          */}
-                        {host.running && eta ? (
-                            <div className="hidden min-w-44 flex-col gap-1 md:flex">
-                                <div className="flex items-baseline justify-between gap-2 text-xs">
-                                    {/* Plain foreground: the count is a fact, not a warning. The bar
-                                        below carries the "something is running" colour. */}
-                                    <span className="tabular-nums text-foreground">
-                                        {host.status?.progress?.done ?? 0} / {host.status?.progress?.total ?? 0}
-                                    </span>
-                                    <span className="text-muted-foreground">
-                                        {eta.remaining ? `~${eta.remaining} left` : "estimating…"}
-                                    </span>
-                                </div>
-                                <Progress
-                                    value={eta.fraction * 100}
-                                    className="[&_[data-slot=progress-indicator]]:bg-peach"
-                                />
-                            </div>
-                        ) : null}
+                {host.running && eta ? (
+                    <div className="hidden min-w-44 flex-col gap-1 md:flex">
+                        <div className="flex items-baseline justify-between gap-2 text-xs">
+                            <span className="tabular-nums text-foreground">
+                                {host.status?.progress?.done ?? 0} / {host.status?.progress?.total ?? 0}
+                            </span>
+                            <span className="text-muted-foreground">
+                                {eta.remaining ? `~${eta.remaining} left` : "estimating…"}
+                            </span>
+                        </div>
+                        <Progress value={eta.fraction * 100} className="[&_[data-slot=progress-indicator]]:bg-peach" />
                     </div>
                 ) : null}
             </div>
@@ -162,24 +144,6 @@ export function TopBar({
                     <ClipboardCheck className="size-4" />
                     <span className="hidden sm:inline">Review</span>
                 </Button>
-                <Button
-                    size="sm"
-                    variant={mode === "code" ? "secondary" : "ghost"}
-                    className={mode === "code" ? "bg-background shadow-sm" : ""}
-                    onClick={() => onModeChange("code")}
-                >
-                    <FileCode2 className="size-4" />
-                    <span className="hidden sm:inline">Code</span>
-                </Button>
-                <Button
-                    size="sm"
-                    variant={mode === "transcript" ? "secondary" : "ghost"}
-                    className={mode === "transcript" ? "bg-background shadow-sm" : ""}
-                    onClick={() => onModeChange("transcript")}
-                >
-                    <ScrollText className="size-4" />
-                    <span className="hidden sm:inline">Transcript</span>
-                </Button>
             </div>
 
             <div className="flex min-w-0 items-center justify-end gap-3">
@@ -192,42 +156,6 @@ export function TopBar({
                     </TooltipTrigger>
                     <TooltipContent>Download every saved report as CSV and JSON</TooltipContent>
                 </Tooltip>
-
-                {/* The run on screen, and the way to the rest of them: a results table that cannot
-                    name its model is not a result, and nothing else here says which one produced this.
-                    Only once a run exists — until then the primary button on the left is the one way
-                    in, and two controls saying "no run" is one too many. */}
-                {runs.active ? (
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button
-                                size="sm"
-                                variant={mode === "runs" ? "secondary" : "outline"}
-                                onClick={() => onModeChange("runs")}
-                                className="hidden min-w-0 max-w-64 shrink lg:inline-flex"
-                            >
-                                <Cpu className="size-3.5 shrink-0" />
-                                <span className="truncate">{runs.active.model}</span>
-                                {/* Without this it reads as a label. It is the only way to the run
-                                    history, and the first person to use it went looking for one. */}
-                                <ChevronDown className="size-3 shrink-0 opacity-60" />
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                            Showing {runs.active.id} — click for past runs and to start a new one
-                        </TooltipContent>
-                    </Tooltip>
-                ) : host.model ? (
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Badge variant="outline" className="hidden min-w-0 max-w-56 shrink font-normal xl:inline-flex">
-                                <Cpu className="size-3 shrink-0" />
-                                <span className="truncate">{host.model}</span>
-                            </Badge>
-                        </TooltipTrigger>
-                        <TooltipContent>Migrations on this host run with {host.model}</TooltipContent>
-                    </Tooltip>
-                ) : null}
 
                 <Tooltip>
                     <TooltipTrigger asChild>
@@ -242,21 +170,6 @@ export function TopBar({
                         </Button>
                     </TooltipTrigger>
                     <TooltipContent>Settings</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => onModeChange("settings")}
-                            className="min-w-0 max-w-72 shrink text-muted-foreground"
-                        >
-                            <span className={cn("size-2 shrink-0 rounded-full", link.dot)} />
-                            <span className="hidden truncate md:inline">{link.label}</span>
-                            <Plug className="size-3.5 md:hidden" />
-                        </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>{link.hint}</TooltipContent>
                 </Tooltip>
             </div>
         </header>

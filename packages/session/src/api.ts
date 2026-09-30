@@ -1,6 +1,15 @@
 import type { ConnectionStatus } from "./types.js";
 
 /**
+ * How long a call may go unanswered before it is treated as lost.
+ *
+ * Long enough that no working call trips it: explaining a failure runs a model, and an export pulls
+ * every transcript in the corpus. Short enough that a wedged host surfaces as an error the user can
+ * read rather than a control that spins forever.
+ */
+const CALL_TIMEOUT_MS = 120_000;
+
+/**
  * Protocol client over WebSocket. Owns the connection lifecycle including
  * reconnect with exponential backoff. Requests are id-mapped; responses are
  * routed to their pending promise.
@@ -44,9 +53,31 @@ export class ExtlensClient {
     }
     const id = this.nextId++;
     return new Promise<T>((resolve, reject) => {
+      /*
+       * Every call gets a deadline.
+       *
+       * A dropped connection already fails its in-flight calls (handleDisconnect), but a host that
+       * stays connected and simply never answers left the caller waiting forever, and the client has
+       * no way to tell that from slow. It showed up as a dialog stuck on its spinner with nothing to
+       * click and nothing logged.
+       *
+       * Generous on purpose: explaining a failure runs a model and collecting a corpus of transcripts
+       * moves megabytes, so this is a stuck-detector and not a latency budget.
+       */
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`${method} timed out after ${Math.round(CALL_TIMEOUT_MS / 1000)}s`));
+      }, CALL_TIMEOUT_MS);
+
       this.pending.set(id, {
-        resolve: resolve as (value: unknown) => void,
-        reject,
+        resolve: ((value: unknown) => {
+          clearTimeout(timer);
+          (resolve as (value: unknown) => void)(value);
+        }) as (value: unknown) => void,
+        reject: (error: Error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
       });
       ws.send(
         JSON.stringify({

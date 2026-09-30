@@ -17,11 +17,12 @@
 import * as React from "react";
 import { useEffect, useRef, useState } from "react";
 import type { HostStatus, LogLine } from "@extlens/protocol";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp, Cpu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import { cn } from "@/lib/utils";
 import { clampDockHeight, heightAfterDrag, MIN_DOCK_HEIGHT } from "@/lib/dock-height";
+import type { ConnectionLine } from "@/lib/connection";
 
 /**
  * Phase as a coloured dot and a word, not a pill.
@@ -59,12 +60,17 @@ export function LogDock({
     status,
     lines,
     error,
+    model,
+    connection,
 }: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     status: HostStatus | null;
     lines: LogLine[];
     error: string | null;
+    /** The model the active run uses. Shown, not offered: changing it means a new run. */
+    model: string | null;
+    connection: ConnectionLine;
 }) {
     const scroller = useRef<HTMLDivElement>(null);
     const pinned = useRef(true);
@@ -135,8 +141,21 @@ export function LogDock({
                     Host log
                 </Button>
                 <PhaseLine status={status} error={error} />
-                <div className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
+                <div className="ml-auto flex min-w-0 items-center gap-3 text-xs text-muted-foreground">
                     <span className="tabular-nums">{lines.length} lines</span>
+                    {/* Standing status, not controls. Both used to be buttons in the top bar: the
+                        model opened the runs list and the host opened settings, which the gear beside
+                        it already did. */}
+                    {model ? (
+                        <span className="hidden min-w-0 items-center gap-1.5 lg:flex" title={model}>
+                            <Cpu className="size-3 shrink-0" />
+                            <span className="max-w-56 truncate">{model}</span>
+                        </span>
+                    ) : null}
+                    <span className="hidden min-w-0 items-center gap-1.5 md:flex" title={connection.label}>
+                        <span className={cn("size-2 shrink-0 rounded-full", connection.dot)} />
+                        <span className="max-w-64 truncate">{connection.label}</span>
+                    </span>
                     <Kbd>l</Kbd>
                 </div>
             </div>

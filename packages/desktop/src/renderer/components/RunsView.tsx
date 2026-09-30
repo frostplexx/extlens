@@ -50,6 +50,7 @@ export function RunsView({
                 <span className="text-xs text-muted-foreground">
                     {runs.runs.length} run{runs.runs.length === 1 ? "" : "s"}
                 </span>
+                {runs.busy ? <Spinner className="size-4 text-muted-foreground" /> : null}
                 <div className="ml-auto flex items-center gap-2">
                     <Button variant="ghost" size="icon-sm" onClick={runs.reload} title="Reload">
                         <RefreshCw className="size-4" />
@@ -73,7 +74,7 @@ export function RunsView({
                         </EmptyMedia>
                         <EmptyTitle>No runs yet</EmptyTitle>
                         <EmptyDescription>
-                            A run is one model over one corpus. Create one and it becomes what this window shows.
+                            A run is one model over one corpus.
                         </EmptyDescription>
                     </EmptyHeader>
                     <Button onClick={onNewRun}>
@@ -88,6 +89,8 @@ export function RunsView({
                             <RunRow
                                 key={run.id}
                                 run={run}
+                                // Both stop the actions, for different reasons: a call is in flight,
+                                // or the host refuses to re-point while a migration writes into a run.
                                 disabled={runs.busy || running}
                                 onOpen={() => runs.select(run.id)}
                                 onDelete={() => runs.remove(run.id)}
@@ -173,9 +176,7 @@ function RunRow({
                 </Button>
                 {confirming ? (
                     <>
-                        <span className="text-xs text-destructive">
-                            Delete this run's migrations, reports and transcripts?
-                        </span>
+                        <span className="text-xs text-destructive">Delete for good?</span>
                         <Button size="sm" variant="destructive" disabled={disabled} onClick={onDelete}>
                             Delete
                         </Button>
@@ -199,11 +200,10 @@ function RunRow({
                             </Button>
                         </TooltipTrigger>
                         <TooltipContent>
-                            {run.active ? "Open another run before deleting this one" : "Delete this run for good"}
+                            {run.active ? "Open another run first" : "Delete this run"}
                         </TooltipContent>
                     </Tooltip>
                 )}
-                {disabled ? <Spinner className="size-4 text-muted-foreground" /> : null}
             </div>
         </article>
     );

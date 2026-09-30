@@ -25,7 +25,7 @@ export type ExplainFn = (extensionId: string) => Promise<ExplainResult>;
  */
 function unsupportedReason(message: string): string | null {
     if (/no model configured/i.test(message)) {
-        return "This host has no model configured. Give it one — LLM_MODEL for a migrator host, or ANTHROPIC_API_KEY — and restart it.";
+        return "This host has no model configured. Set LLM_MODEL or ANTHROPIC_API_KEY and restart it.";
     }
     if (/unknown method|not found|not implemented/i.test(message)) {
         return "This host predates failure explanations. Update its extlens SDK and restart it.";

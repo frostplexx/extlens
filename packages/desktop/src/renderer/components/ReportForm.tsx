@@ -371,7 +371,7 @@ export function ReportForm({
                     <FieldLabel>Verdict</FieldLabel>
                     <FieldDescription>
                         {summary.testable === 0
-                            ? "Nothing testable yet — judge a surface above."
+                            ? "Nothing testable yet. Judge a surface above."
                             : `${summary.working} working, ${summary.partial} partial, ${summary.broken} broken of ${summary.testable} testable` +
                               (summary.notTestable > 0 ? ` · ${summary.notTestable} excluded as untestable` : "")}
                     </FieldDescription>

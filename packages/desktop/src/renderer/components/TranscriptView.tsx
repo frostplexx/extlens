@@ -91,7 +91,7 @@ export function TranscriptView({
                     </EmptyMedia>
                     <EmptyTitle>No extension to show</EmptyTitle>
                     <EmptyDescription>
-                        Pick one in Browse first; the transcript is of whatever is selected there.
+                        Pick one in Browse first.
                     </EmptyDescription>
                 </EmptyHeader>
                 <Button variant="outline" onClick={onExit}>
@@ -151,8 +151,7 @@ function Body({ transcript, entries }: { transcript: TranscriptState; entries: T
                     </EmptyMedia>
                     <EmptyTitle>This host keeps no transcripts</EmptyTitle>
                     <EmptyDescription>
-                        Transcripts come from a host that runs the migration agent itself. A folder of
-                        extensions has no agent, so there is nothing to record.
+                        Only a host that runs the migration agent records one.
                     </EmptyDescription>
                 </EmptyHeader>
             </Empty>
@@ -188,8 +187,7 @@ function Body({ transcript, entries }: { transcript: TranscriptState; entries: T
                     <EmptyDescription>
                         {/* Two very different situations, and the reviewer can tell which from the row:
                             an extension nobody has migrated, or a run that recorded nothing. */}
-                        Either it has not been migrated yet, or it was migrated before the agent kept a
-                        record of what it did.
+                        Either it has not been migrated, or it was migrated before transcripts existed.
                     </EmptyDescription>
                 </EmptyHeader>
             </Empty>

@@ -168,7 +168,7 @@ function BrowsersSection({ bridge }: { bridge: BridgeHandle }) {
                                                 In use: <Mono className="text-foreground">{resolved.path}</Mono> ({SOURCE_TEXT[resolved.source]})
                                             </>
                                         ) : (
-                                            <span className="text-destructive">None found — set a path or download one.</span>
+                                            <span className="text-destructive">None found. Set a path or download one.</span>
                                         )}
                                         {browser.phase === "failed" && browser.message ? (
                                             <span className="block text-destructive">{browser.message}</span>
