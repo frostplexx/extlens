@@ -708,8 +708,13 @@ export const RunInfoSchema = z.object({
   active: z.boolean(),
   /** Extensions with a migrated tree on disk. */
   extensions: z.number().int().nonnegative().default(0),
-  /** Of those, how many the harness verified, and how many a human has reviewed. */
-  migrated: z.number().int().nonnegative().default(0),
+  /**
+   * Of those, how many the harness itself verified: Chrome loaded the MV3 build and its service
+   * worker registered. Not a human review, and not the number that produced a report — a batch that
+   * failed every verification still writes one per extension.
+   */
+  passed: z.number().int().nonnegative().default(0),
+  /** How many a human has actually reviewed. */
   reviewed: z.number().int().nonnegative().default(0),
   /**
    * The environment the run's containers get, minus the key.

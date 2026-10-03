@@ -152,10 +152,10 @@ function RunRow({
                 <span className="tabular-nums">
                     <span className="font-medium text-foreground">{run.extensions}</span> migrated
                 </span>
-                <span className="tabular-nums">
-                    <span className="font-medium text-foreground">{run.migrated}</span> verified
+                <span className="tabular-nums" title="Chrome loaded the MV3 build and its service worker registered">
+                    <span className="font-medium text-foreground">{run.passed}</span> passed
                 </span>
-                <span className="tabular-nums">
+                <span className="tabular-nums" title="A human filled in the review form">
                     <span className="font-medium text-foreground">{run.reviewed}</span> reviewed
                 </span>
                 {thinking && thinking !== "off" ? <span>thinking {thinking}</span> : null}
