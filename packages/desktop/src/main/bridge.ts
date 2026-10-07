@@ -81,6 +81,13 @@ export class Bridge {
      * every click would be a fresh download of the whole extension.
      */
     private resolved = new Map<string, FileRefs>();
+    /**
+     * Downloads currently in flight, per resolve key. Concurrent callers of the same resolve
+     * used to each start their own tar — a queue advance with auto-launch, profile fetch and
+     * code explorer landing at once could open a dozen identical sessions on the ssh master's
+     * connection, saturate its session slots, and wedge every forward through it.
+     */
+    private pending = new Map<string, Promise<FileRefs>>();
 
     constructor(private deps: BridgeDeps) {}
 
@@ -163,6 +170,10 @@ export class Bridge {
                 // disable launch and show the spinner.
                 this.set(label, { phase: "downloading", message: "downloading extension…", extensionId: null });
                 resolved[label] = await session.downloadRef(label, id ?? "extension", ref);
+                // Launch callers reset the whole browser state right after this, but a
+                // resolve from the code explorer or a profile fetch has no such follow-up —
+                // without restoring, the pill would show “downloading extension…” forever.
+                this.set(label, { phase: "idle", message: null, extensionId: null });
                 done.add(label);
             }
         } catch (error) {
@@ -187,9 +198,18 @@ export class Bridge {
         const key = `${id ?? ""}\0${files.mv2 ?? ""}\0${files.mv3 ?? ""}`;
         const hit = this.resolved.get(key);
         if (hit) return hit;
-        const resolved = await this.resolve(files, id);
-        this.resolved.set(key, resolved);
-        return resolved;
+        const inFlight = this.pending.get(key);
+        if (inFlight) return inFlight;
+        const promise = this.resolve(files, id)
+            .then((resolved) => {
+                this.resolved.set(key, resolved);
+                return resolved;
+            })
+            .finally(() => {
+                this.pending.delete(key);
+            });
+        this.pending.set(key, promise);
+        return promise;
     }
 
     /** The extension's files with an MV2→MV3 status per path, for the code explorer. */

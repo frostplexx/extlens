@@ -95,6 +95,8 @@ describe("local method routing", () => {
     it("broadcasts a downloading phase per label while the extension tars down", async () => {
         // The tar-down of a remote extension is the long, silent stretch between clicking launch
         // and the browser appearing; the page disables launch and spins on exactly this phase.
+        // local.source.tree drives the same resolve path without going on to launch browsers
+        // (resolveExecutable would find the developer's real Chrome here).
         const broadcast = vi.fn();
         let release: (() => void) | null = null;
         const gate = new Promise<void>((r) => (release = r));
@@ -107,19 +109,20 @@ describe("local method routing", () => {
             },
         } as unknown as SshManager;
         const bridge = new Bridge({ client: () => null, ssh: { enabled: () => true, manager: () => manager }, broadcast });
-        const launching = bridge.handle("local.launch", { files: { mv2: "file:///remote/ext" }, id: "one-ext" });
-        // Let the launch reach its download, then read the broadcast payload while it is in flight.
+        const tree = bridge.handle("local.source.tree", { files: { mv2: "file:///remote/ext" }, id: "one-ext" });
+        // Let the resolve reach its download, then read the broadcast payload while it is in flight.
         await new Promise((r) => setTimeout(r, 0));
         const inFlight = broadcast.mock.calls.map(([, payload]) => payload as { browsers: Record<string, { phase: string; message: string | null }> });
         expect(inFlight.some((s) => s.browsers.mv2.phase === "downloading" && s.browsers.mv2.message === "downloading extension…")).toBe(true);
         expect(inFlight.every((s) => s.browsers.mv3.phase !== "downloading")).toBe(true);
         release?.();
-        await launching;
-        // Chrome is not installed here, so the launch ends in a prompt with the phase reset —
-        // a finished download must not leave "downloading…" behind.
+        await tree;
+        // A resolve that is not followed by a launch (source tree, profile) must still clear
+        // the phase — a finished download must not leave "downloading…" behind.
         const final = (await bridge.handle("local.status", {})) as ReturnType<Bridge["snapshot"]>;
         expect(final.browsers.mv2.phase).toBe("idle");
-        expect(final.prompts).toHaveLength(1);
+        expect(final.browsers.mv2.message).toBeNull();
+        expect(final.prompts).toHaveLength(0);
     });
 
     it("marks the failed label and resets the finished one when a download dies", async () => {
@@ -139,5 +142,39 @@ describe("local method routing", () => {
         expect(final.browsers.mv2.phase).toBe("idle");
         expect(final.browsers.mv3.phase).toBe("failed");
         expect(final.browsers.mv3.message).toMatch(/downloading failed: ssh pipe broke/);
+    });
+
+    it("shares one download between concurrent resolvers of the same extension", async () => {
+        // Navigating fires resolve for the same extension from several places at once
+        // (auto-launch, profile, code explorer). Each used to tar the extension down
+        // separately; the sessions saturated the ssh master and wedged the tunnel.
+        const broadcast = vi.fn();
+        const calls: string[] = [];
+        let release: (() => void) | null = null;
+        const gate = new Promise<void>((r) => (release = r));
+        const manager = {
+            session: {
+                downloadRef: async (label: string, id: string) => {
+                    calls.push(`${label}:${id}`);
+                    await gate;
+                    return `file:///tmp/cache/${id}/${label}`;
+                },
+            },
+        } as unknown as SshManager;
+        const bridge = new Bridge({ client: () => null, ssh: { enabled: () => true, manager: () => manager }, broadcast });
+        const files = { mv2: "file:///remote/ext", mv3: "file:///remote/ext" };
+        const pending = Promise.all([
+            bridge.handle("local.source.tree", { files, id: "one-ext" }),
+            bridge.handle("local.source.tree", { files, id: "one-ext" }),
+            bridge.handle("local.source.tree", { files, id: "one-ext" }),
+        ]);
+        await new Promise((r) => setTimeout(r, 10));
+        // Three concurrent resolvers, one download started: mv2 is in flight, and
+        // mv3 waits behind it in the per-resolve loop rather than starting a copy.
+        expect(calls).toEqual(["mv2:one-ext"]);
+        release?.();
+        const trees = (await pending) as unknown as { entries: unknown[] }[];
+        expect(calls).toEqual(["mv2:one-ext", "mv3:one-ext"]);
+        expect(trees.every((t) => Array.isArray(t.entries))).toBe(true);
     });
 });

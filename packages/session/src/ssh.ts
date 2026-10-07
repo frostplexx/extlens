@@ -47,6 +47,15 @@ export interface SshManagerOptions {
   onStatus: (status: TunnelStatus, message?: string) => void;
   /** The ssh executable; defaults to the system `ssh` on PATH. */
   sshBin?: string;
+  /**
+   * Cap on concurrent file downloads. Every download opens a session channel
+   * through the one multiplexed master connection, and sshd refuses sessions
+   * past MaxSessions (10 by default) — a review pass that fires a dozen at once
+   * saturates the master and wedges the websocket forward with it.
+   */
+  maxConcurrentDownloads?: number;
+  /** Kill a download that outlives this; a wedged channel must free its slot rather than hang forever. */
+  downloadTimeoutMs?: number;
 }
 
 export interface SshManager {
@@ -101,6 +110,7 @@ export function createSshManager(options: SshManagerOptions): SshManager {
   let session: SshSession | null = null;
   let state: "idle" | "connecting" | "up" | "down" | "failed" | "stopped" = "idle";
   let probeTimer: ReturnType<typeof setInterval> | null = null;
+  let probing = false;
   let port: number | null = null;
   const { spec } = options;
   const sshBin = options.sshBin ?? "ssh";
@@ -109,6 +119,27 @@ export function createSshManager(options: SshManagerOptions): SshManager {
     `extlens-${process.pid}-${Math.random().toString(36).slice(2, 8)}.sock`,
   );
   const cacheDir = mkdtempSync(join(tmpdir(), "extlens-ssh-"));
+  const maxDownloads = Math.max(1, options.maxConcurrentDownloads ?? 2);
+  const downloadTimeoutMs = options.downloadTimeoutMs ?? 5 * 60_000;
+
+  // Session slots on the master's single connection are a shared, server-capped
+  // resource (sshd MaxSessions). Crossing that cap once wedges every channel on
+  // the connection — forwards included — and nothing recovers, so downloads queue
+  // here instead of ever exceeding the cap.
+  let activeDownloads = 0;
+  const downloadWaiters: Array<() => void> = [];
+  async function withDownloadSlot<T>(job: () => Promise<T>): Promise<T> {
+    if (activeDownloads >= maxDownloads) {
+      await new Promise<void>((resolve) => downloadWaiters.push(resolve));
+    }
+    activeDownloads += 1;
+    try {
+      return await job();
+    } finally {
+      activeDownloads -= 1;
+      downloadWaiters.shift()?.();
+    }
+  }
 
   const baseArgs = [
     "-o", `ControlPath=${controlPath}`,
@@ -126,34 +157,36 @@ export function createSshManager(options: SshManagerOptions): SshManager {
     return {
       destination: spec.destination,
       localPort,
-      downloadRef: async (label: "mv2" | "mv3", id: string, remoteRef: string) => {
-        const remotePath = normalizeRemoteRef(remoteRef);
-        const localDir = join(cacheDir, id, label);
-        mkdirSync(localDir, { recursive: true });
-        const remoteCommand = [
-          "tar",
-          "-C", quoteForRemoteShell(dirname(remotePath)),
-          "-cf", "-",
-          quoteForRemoteShell(basename(remotePath)),
-        ].join(" ");
-        const { code, stderr } = await streamSsh(
-          [
-            ...baseArgs,
-            "-o", "BatchMode=yes",
-            "-o", "ConnectTimeout=3",
-            spec.destination,
-            remoteCommand,
-          ],
-          localDir,
-          sshBin,
-        );
-        if (code !== 0) {
-          throw new Error(
-            `ssh file download failed (exit ${code}): ${stderr.trim() || remoteRef}`,
+      downloadRef: async (label: "mv2" | "mv3", id: string, remoteRef: string) =>
+        withDownloadSlot(async () => {
+          const remotePath = normalizeRemoteRef(remoteRef);
+          const localDir = join(cacheDir, id, label);
+          mkdirSync(localDir, { recursive: true });
+          const remoteCommand = [
+            "tar",
+            "-C", quoteForRemoteShell(dirname(remotePath)),
+            "-cf", "-",
+            quoteForRemoteShell(basename(remotePath)),
+          ].join(" ");
+          const { code, stderr } = await streamSsh(
+            [
+              ...baseArgs,
+              "-o", "BatchMode=yes",
+              "-o", "ConnectTimeout=3",
+              spec.destination,
+              remoteCommand,
+            ],
+            localDir,
+            sshBin,
+            downloadTimeoutMs,
           );
-        }
-        return join(localDir, basename(remotePath));
-      },
+          if (code !== 0) {
+            throw new Error(
+              `ssh file download failed (exit ${code}): ${stderr.trim() || remoteRef}`,
+            );
+          }
+          return join(localDir, basename(remotePath));
+        }),
     };
   }
 
@@ -236,7 +269,7 @@ export function createSshManager(options: SshManagerOptions): SshManager {
           "-O", "exit",
           spec.destination,
         ],
-        { stdio: "ignore" },
+        { stdio: "ignore", timeout: 5_000 },
       );
     } catch {
       /* the master may already be gone */
@@ -252,17 +285,26 @@ export function createSshManager(options: SshManagerOptions): SshManager {
   }
 
   async function probe(): Promise<void> {
-    if (state !== "up" || port === null) return;
-    if (await portOpen(port)) return;
-    state = "down";
-    options.onStatus("down");
-    stopProbe();
-    await teardown();
-    // stop() may have run during teardown; the local narrowing misses it.
-    if ((state as string) === "stopped") return;
-    state = "connecting";
-    options.onStatus("reconnecting");
-    await connect();
+    if (probing || state !== "up" || port === null) return;
+    probing = true;
+    try {
+      // The local listener accepts TCP as long as the master process lives — even
+      // when its multiplexed connection is wedged and forwards nothing. A real
+      // session through the master is the honest check: the websocket and every
+      // download ride that path, so failing it means the tunnel is unusable.
+      if ((await portOpen(port)) && (await sessionAlive(baseArgs, spec.destination, sshBin))) return;
+      state = "down";
+      options.onStatus("down");
+      stopProbe();
+      await teardown();
+      // stop() may have run during teardown; the local narrowing misses it.
+      if ((state as string) === "stopped") return;
+      state = "connecting";
+      options.onStatus("reconnecting");
+      await connect();
+    } finally {
+      probing = false;
+    }
   }
 
   function startProbe(): void {
@@ -306,7 +348,9 @@ export function createSshManager(options: SshManagerOptions): SshManager {
             "-O", "exit",
             spec.destination,
           ],
-          { stdio: "ignore" },
+          // A wedged master must not keep the app from quitting: the control
+          // request itself can hang when the connection is wedged.
+          { stdio: "ignore", timeout: 5_000 },
         );
       } catch {
         /* ignore */
@@ -441,11 +485,18 @@ function spawnSshFork(
   });
 }
 
-/** Pipe `ssh <args>` stdout into a local `tar -xf -` in extractDir. */
+/**
+ * Pipe `ssh <args>` stdout into a local `tar -xf -` in extractDir.
+ *
+ * `timeoutMs` kills both children when the stream stalls — a wedged channel
+ * must fail the download (retryable) rather than hold its slot and its session
+ * on the master's connection forever.
+ */
 function streamSsh(
   args: string[],
   extractDir: string,
   sshBin = "ssh",
+  timeoutMs?: number,
 ): Promise<{ code: number | null; stderr: string }> {
   return new Promise((resolve, reject) => {
     const ssh = spawn(sshBin, args, { stdio: ["ignore", "pipe", "pipe"] });
@@ -454,6 +505,7 @@ function streamSsh(
     });
     let sshErr = "";
     let tarErr = "";
+    let timedOut = false;
     ssh.stderr?.on("data", (chunk) => {
       sshErr += chunk.toString();
     });
@@ -464,21 +516,69 @@ function streamSsh(
     tar.once("error", reject);
     ssh.stdout.pipe(tar.stdin);
 
+    const killer =
+      timeoutMs && timeoutMs > 0
+        ? setTimeout(() => {
+            timedOut = true;
+            ssh.kill("SIGKILL");
+            tar.kill("SIGKILL");
+          }, timeoutMs)
+        : null;
+
     let sshCode: number | null = null;
     let tarCode: number | null = null;
+    let sshClosed = false;
+    let tarClosed = false;
     const done = () => {
-      if (sshCode === null || tarCode === null) return;
+      if (!sshClosed || !tarClosed) return;
+      if (killer) clearTimeout(killer);
+      if (timedOut) {
+        resolve({ code: -1, stderr: `download timed out after ${timeoutMs}ms` });
+        return;
+      }
       const code = sshCode !== 0 ? sshCode : tarCode;
       resolve({ code, stderr: [sshErr, tarErr].filter(Boolean).join("\n") });
     };
+    // A killed child reports close(null) — a signal, not "still running" — so track
+    // closure separately from the exit code.
     ssh.once("close", (code) => {
-      sshCode = code;
+      sshCode = code ?? -1;
+      sshClosed = true;
       done();
     });
     tar.once("close", (code) => {
-      tarCode = code;
+      tarCode = code ?? -1;
+      tarClosed = true;
       done();
     });
+  });
+}
+
+/**
+ * Can the master actually open a session right now? Runs `true` through the
+ * control socket and bounds it — the probe uses this because a wedged master
+ * still listens and still accepts TCP, and only a session attempt notices.
+ */
+function sessionAlive(baseArgs: string[], destination: string, sshBin: string, timeoutMs = 8_000): Promise<boolean> {
+  return new Promise((resolve) => {
+    const child = spawn(
+      sshBin,
+      [...baseArgs, "-o", "BatchMode=yes", "-o", "ConnectTimeout=3", destination, "true"],
+      { stdio: ["ignore", "ignore", "ignore"] },
+    );
+    let settled = false;
+    const finish = (result: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(result);
+    };
+    const timer = setTimeout(() => {
+      child.kill("SIGKILL");
+      finish(false);
+    }, timeoutMs);
+    child.once("error", () => finish(false));
+    child.once("exit", (code) => finish(code === 0));
   });
 }
 

@@ -52,8 +52,18 @@ if (listen !== -1) {
 }
 
 const remoteCommand = args[args.length - 1];
-const child = spawn("/bin/sh", ["-c", remoteCommand], { stdio: "inherit" });
-child.on("exit", (code) => process.exit(code ?? 1));
+// FAKE_SSH_HANG_SESSIONS: exec sessions (downloads, the manager's session probe)
+// never finish — a wedged master whose channels stall while the forwarder stays up.
+if (process.env.FAKE_SSH_HANG_SESSIONS) {
+  setInterval(() => {}, 1000);
+} else {
+  // FAKE_SSH_DOWNLOAD_DELAY: slow every exec by N seconds, to exercise download
+  // concurrency limits and timeouts deterministically.
+  const delaySec = Number(process.env.FAKE_SSH_DOWNLOAD_DELAY ?? 0);
+  const command = delaySec > 0 ? `sleep ${delaySec}; ${remoteCommand}` : remoteCommand;
+  const child = spawn("/bin/sh", ["-c", command], { stdio: "inherit" });
+  child.on("exit", (code) => process.exit(code ?? 1));
+}
 
 function startForwarder() {
   const spec = args[args.indexOf("-L") + 1];

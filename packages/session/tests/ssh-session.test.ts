@@ -81,15 +81,21 @@ describe("createSshManager over the fake ssh", () => {
     delete process.env.FAKE_SSH_KEY_AUTH;
     delete process.env.FAKE_SSH_EXPECTED_PASSWORD;
     delete process.env.KILL_FILE;
+    delete process.env.FAKE_SSH_HANG_SESSIONS;
+    delete process.env.FAKE_SSH_DOWNLOAD_DELAY;
     await new Promise<void>((resolve) => remote.close(() => resolve()));
   });
 
-  function manager(getSecret: () => Promise<string> = async () => ""): SshManager {
+  function manager(
+    getSecret: () => Promise<string> = async () => "",
+    overrides: Partial<Parameters<typeof createSshManager>[0]> = {},
+  ): SshManager {
     return createSshManager({
       spec: { destination: "fakehost", remotePort },
       getSecret,
       sshBin: FAKE_BIN,
       onStatus: (status) => statuses.push(status),
+      ...overrides,
     });
   }
 
@@ -224,4 +230,57 @@ describe("createSshManager over the fake ssh", () => {
     expect(m.session).toBeNull();
     m.stop();
   });
+
+  it("kills a wedged download after the timeout instead of hanging forever", async () => {
+    process.env.FAKE_SSH_HANG_SESSIONS = "1";
+    const m = manager(async () => "", { downloadTimeoutMs: 400 });
+    m.start();
+    await waitUntil(() => statuses.includes("up"));
+    const started = Date.now();
+    await expect(
+      (m.session as NonNullable<typeof m.session>).downloadRef("mv2", "ext-timeout", "/remote/tree"),
+    ).rejects.toThrow(/timed out/);
+    // A bound failure, not a silent forever: the caller can retry, the slot frees.
+    expect(Date.now() - started).toBeLessThan(5000);
+    m.stop();
+  });
+
+  it("caps concurrent downloads so the master's session slots are never exhausted", async () => {
+    process.env.FAKE_SSH_DOWNLOAD_DELAY = "0.6";
+    const m = manager(async () => "", { maxConcurrentDownloads: 2 });
+    m.start();
+    await waitUntil(() => statuses.includes("up"));
+    const tree = mkdtempSync(join(tmpdir(), "extlens-fake-remote-"));
+    writeFileSync(join(tree, "manifest.json"), "{}");
+    const session = m.session as NonNullable<typeof m.session>;
+    const started = Date.now();
+    await Promise.all([
+      session.downloadRef("mv2", "cap1", tree),
+      session.downloadRef("mv2", "cap2", tree),
+      session.downloadRef("mv2", "cap3", tree),
+      session.downloadRef("mv2", "cap4", tree),
+    ]);
+    const elapsed = Date.now() - started;
+    // Four 0.6s downloads through a cap of two run as two waves.
+    expect(elapsed).toBeGreaterThanOrEqual(1100);
+    expect(elapsed).toBeLessThan(4000);
+    rmSync(tree, { recursive: true, force: true });
+    m.stop();
+  });
+
+  it("recycles a wedged master whose sessions hang while its forward looks alive", async () => {
+    process.env.FAKE_SSH_HANG_SESSIONS = "1";
+    const m = manager();
+    m.start();
+    await waitUntil(() => statuses.includes("up"));
+    const port = m.localPort as number;
+    // Exactly yesterday's wedge: the port accepts, so a port-only probe is blind.
+    expect(await portOpen(port)).toBe(true);
+    // The session probe notices and recycles the master.
+    await waitUntil(() => statuses.includes("down"), 20000);
+    delete process.env.FAKE_SSH_HANG_SESSIONS;
+    await waitUntil(() => statuses.filter((s) => s === "up").length >= 2, 20000);
+    expect(await connectOnce(port)).toBe("pong");
+    m.stop();
+  }, 30000);
 });
