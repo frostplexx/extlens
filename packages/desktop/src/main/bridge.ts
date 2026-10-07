@@ -152,9 +152,33 @@ export class Bridge {
         const session = this.deps.ssh.manager()?.session;
         if (!session) throw new Error("tunnel not up");
         const resolved: FileRefs = {};
-        for (const label of ["mv2", "mv3"] as const) {
-            const ref = files[label];
-            if (ref) resolved[label] = await session.downloadRef(label, id ?? "extension", ref);
+        const labels = ["mv2", "mv3"] as const;
+        const done = new Set<BrowserLabel>();
+        try {
+            for (const label of labels) {
+                const ref = files[label];
+                if (!ref) continue;
+                // The tar-down can take seconds to minutes; without this the click looks dead
+                // until the browser suddenly appears. The page watches exactly this phase to
+                // disable launch and show the spinner.
+                this.set(label, { phase: "downloading", message: "downloading extension…", extensionId: null });
+                resolved[label] = await session.downloadRef(label, id ?? "extension", ref);
+                done.add(label);
+            }
+        } catch (error) {
+            // Rethrown for the page's toast, but the phase has to say why on its own: a failed
+            // download that left "downloading…" on screen would look like a wedged spinner.
+            const message = error instanceof Error ? error.message : String(error);
+            for (const label of labels) {
+                if (!files[label]) continue;
+                this.set(
+                    label,
+                    done.has(label)
+                        ? { phase: "idle", message: null, extensionId: null }
+                        : { phase: "failed", message: `downloading failed: ${message}`, extensionId: null },
+                );
+            }
+            throw error;
         }
         return resolved;
     }

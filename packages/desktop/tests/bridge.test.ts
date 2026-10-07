@@ -4,6 +4,7 @@
  * set, and file refs resolve to a directory Chrome can actually load.
  */
 import { describe, expect, it, vi } from "vitest";
+import type { SshManager } from "@extlens/session";
 import { Bridge, refToPath } from "../src/main/bridge.js";
 
 function makeBridge() {
@@ -89,5 +90,54 @@ describe("local method routing", () => {
         await expect(bridge.handle("local.launch", { files: { mv2: "file:///remote/ext" } })).rejects.toThrow(
             /tunnel not up/,
         );
+    });
+
+    it("broadcasts a downloading phase per label while the extension tars down", async () => {
+        // The tar-down of a remote extension is the long, silent stretch between clicking launch
+        // and the browser appearing; the page disables launch and spins on exactly this phase.
+        const broadcast = vi.fn();
+        let release: (() => void) | null = null;
+        const gate = new Promise<void>((r) => (release = r));
+        const manager = {
+            session: {
+                downloadRef: async () => {
+                    await gate;
+                    return "file:///tmp/local-cache/ext/mv2";
+                },
+            },
+        } as unknown as SshManager;
+        const bridge = new Bridge({ client: () => null, ssh: { enabled: () => true, manager: () => manager }, broadcast });
+        const launching = bridge.handle("local.launch", { files: { mv2: "file:///remote/ext" }, id: "one-ext" });
+        // Let the launch reach its download, then read the broadcast payload while it is in flight.
+        await new Promise((r) => setTimeout(r, 0));
+        const inFlight = broadcast.mock.calls.map(([, payload]) => payload as { browsers: Record<string, { phase: string; message: string | null }> });
+        expect(inFlight.some((s) => s.browsers.mv2.phase === "downloading" && s.browsers.mv2.message === "downloading extension…")).toBe(true);
+        expect(inFlight.every((s) => s.browsers.mv3.phase !== "downloading")).toBe(true);
+        release?.();
+        await launching;
+        // Chrome is not installed here, so the launch ends in a prompt with the phase reset —
+        // a finished download must not leave "downloading…" behind.
+        const final = (await bridge.handle("local.status", {})) as ReturnType<Bridge["snapshot"]>;
+        expect(final.browsers.mv2.phase).toBe("idle");
+        expect(final.prompts).toHaveLength(1);
+    });
+
+    it("marks the failed label and resets the finished one when a download dies", async () => {
+        const broadcast = vi.fn();
+        const manager = {
+            session: {
+                downloadRef: async (label: string) => {
+                    if (label === "mv2") return "file:///tmp/local-cache/ext/mv2";
+                    throw new Error("ssh pipe broke");
+                },
+            },
+        } as unknown as SshManager;
+        const bridge = new Bridge({ client: () => null, ssh: { enabled: () => true, manager: () => manager }, broadcast });
+        const files = { mv2: "file:///remote/ext", mv3: "file:///remote/ext" };
+        await expect(bridge.handle("local.launch", { files, id: "one-ext" })).rejects.toThrow(/pipe broke/);
+        const final = (await bridge.handle("local.status", {})) as ReturnType<Bridge["snapshot"]>;
+        expect(final.browsers.mv2.phase).toBe("idle");
+        expect(final.browsers.mv3.phase).toBe("failed");
+        expect(final.browsers.mv3.message).toMatch(/downloading failed: ssh pipe broke/);
     });
 });
