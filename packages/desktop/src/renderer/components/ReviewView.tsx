@@ -37,7 +37,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import type { ReviewQueue } from "../hooks/useReviewQueue";
 import { QUEUE_FILTERS } from "../hooks/useReviewQueue";
 import type { LocalSnapshot } from "../types";
-import { Mono, PhaseBadge, ScoreBar, prettyTag } from "./shared";
+import { DownloadNotice, Mono, PhaseBadge, ScoreBar, prettyTag } from "./shared";
 import { ReportForm } from "./ReportForm";
 import type { ExplainFn } from "./ExplainCard";
 
@@ -138,6 +138,7 @@ export function ReviewView({
                         <BrowserBar
                             local={local}
                             files={files}
+                            subject={queue.current?.name}
                             onLaunch={onLaunch}
                             onCloseBrowsers={onCloseBrowsers}
                             onAnswerPrompt={onAnswerPrompt}
@@ -349,25 +350,29 @@ function Fact({ label, value, wrap = false }: { label: string; value: string | n
 function BrowserBar({
     local,
     files,
+    subject,
     onLaunch,
     onCloseBrowsers,
     onAnswerPrompt,
 }: {
     local: LocalSnapshot;
     files: FileRefs | null;
+    /** Name of the extension being launched, for the download notice. */
+    subject?: string;
     onLaunch: () => void;
     onCloseBrowsers: () => void;
     onAnswerPrompt: (accept: boolean) => void;
 }) {
     const prompt = local.prompts[0];
     const busy = Object.values(local.browsers).some((b) => b.phase === "launching" || b.phase === "downloading");
+    const downloading = Object.values(local.browsers).some((b) => b.phase === "downloading");
 
     return (
         <div className="shrink-0 space-y-3 p-4 lg:p-5">
             <div className="flex flex-wrap items-center gap-2">
                 <Button onClick={onLaunch} disabled={!files || busy}>
                     {busy ? <Spinner /> : <MonitorPlay className="size-4" />}
-                    Launch browsers
+                    {downloading ? "Downloading…" : "Launch browsers"}
                 </Button>
                 <Button variant="secondary" onClick={onCloseBrowsers}>
                     <SquareX className="size-4" />
@@ -377,6 +382,8 @@ function BrowserBar({
                     <Kbd>b</Kbd> launch · <Kbd>x</Kbd> close · <Kbd>t</Kbd> idle timer
                 </span>
             </div>
+
+            <DownloadNotice local={local} subject={subject} />
 
             <ItemGroup className="gap-2">
                 {(["mv2", "mv3"] as const).map((label) => {

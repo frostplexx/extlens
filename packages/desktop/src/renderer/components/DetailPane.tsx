@@ -25,7 +25,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { LocalSnapshot } from "../types";
-import { Mono, PhaseBadge, ScoreBar, SourceLink, prettyTag } from "./shared";
+import { DownloadNotice, Mono, PhaseBadge, ScoreBar, SourceLink, prettyTag } from "./shared";
 import { ReportForm } from "./ReportForm";
 import type { ExplainFn } from "./ExplainCard";
 
@@ -175,6 +175,7 @@ export function DetailPane({
                 local={local}
                 canLaunch={!!files}
                 files={files}
+                subject={profile.name}
                 onLaunch={onLaunch}
                 onCloseBrowsers={onCloseBrowsers}
                 onAnswerPrompt={onAnswerPrompt}
@@ -277,6 +278,7 @@ function BrowserControls({
     local,
     canLaunch,
     files,
+    subject,
     onLaunch,
     onCloseBrowsers,
     onAnswerPrompt,
@@ -285,6 +287,8 @@ function BrowserControls({
     local: LocalSnapshot;
     canLaunch: boolean;
     files: FileRefs | null;
+    /** Name of the extension being launched, for the download notice. */
+    subject?: string;
     onLaunch: () => void;
     onCloseBrowsers: () => void;
     onAnswerPrompt: (accept: boolean) => void;
@@ -292,6 +296,7 @@ function BrowserControls({
 }) {
     const prompt = local.prompts[0];
     const busy = Object.values(local.browsers).some((b) => b.phase === "launching" || b.phase === "downloading");
+    const downloading = Object.values(local.browsers).some((b) => b.phase === "downloading");
 
     return (
         <div className="shrink-0 space-y-3 p-5">
@@ -315,7 +320,7 @@ function BrowserControls({
                     ) : null}
                     <Button size="sm" onClick={onLaunch} disabled={!canLaunch || busy}>
                         {busy ? <Spinner /> : <MonitorPlay className="size-4" />}
-                        Launch
+                        {downloading ? "Downloading…" : "Launch"}
                     </Button>
                     <Button size="sm" variant="secondary" onClick={onCloseBrowsers}>
                         <SquareX className="size-4" />
@@ -323,6 +328,8 @@ function BrowserControls({
                     </Button>
                 </div>
             </div>
+
+            <DownloadNotice local={local} subject={subject} />
 
             <ItemGroup className="gap-2">
                 {(["mv2", "mv3"] as const).map((label) => {
