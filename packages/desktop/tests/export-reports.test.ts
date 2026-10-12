@@ -214,3 +214,16 @@ describe("transcripts in the JSON", () => {
         expect(json.reports[0].transcript).toBeUndefined();
     });
 });
+
+describe("tags in the JSON", () => {
+    it("carries the row's feature tags through to the export", () => {
+        // Tags are a fact about the extension (its static analysis), not the review, so the host
+        // puts them on the row beside `name` — and the JSON keeps them because the CSV columns
+        // flatten an unbounded list away. Pinned here: the JSON is built by spreading the row, and
+        // a rewrite to explicit fields would silently drop it.
+        const json = JSON.parse(
+            reportsToJson([{ name: "An Ext", tags: ["HAS_BROWSER_POPUP", "USES_WEB_REQUEST"], report: base }]),
+        );
+        expect(json.reports[0].tags).toEqual(["HAS_BROWSER_POPUP", "USES_WEB_REQUEST"]);
+    });
+});

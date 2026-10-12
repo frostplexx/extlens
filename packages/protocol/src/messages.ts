@@ -388,13 +388,15 @@ export const AgentUsageSchema = z.object({
  *
  * The name is included because an export is read by a person and a 32-character id is not a name.
  * It is not stored in the report itself — a report is about one extension at one moment, while the
- * name comes from whatever the manifest currently says. `analysis` and `agentUsage` ride alongside
- * for the same reason: they are facts about the extension and the run that produced it, not about
- * the review, so they do not belong inside a document a human wrote.
+ * name comes from whatever the manifest currently says. `tags`, `analysis` and `agentUsage` ride
+ * alongside for the same reason: they are facts about the extension and the run that produced it,
+ * not about the review, so they do not belong inside a document a human wrote.
  */
 export const ReportRowSchema = z.object({
   name: z.string(),
   report: ReportSchema,
+  /** Feature tags from the extension's analysis. Default [] so hosts predating it stay valid. */
+  tags: z.array(z.string()).default([]),
   analysis: AnalysisSummarySchema.optional(),
   agentUsage: AgentUsageSchema.optional(),
 });
